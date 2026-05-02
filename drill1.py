@@ -76,7 +76,7 @@ class Runner:
                 messages.append(
                     Message(
                         role="assistant",
-                        content="responnse"
+                        content=llm_response
                     )
                 )
 
