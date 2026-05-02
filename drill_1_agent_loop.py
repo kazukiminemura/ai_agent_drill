@@ -50,7 +50,7 @@ class FakeLLM:
         # if tool result is present, return final answer
         return {
             "type": "final",
-            "content": "The answer is 13."
+            "content": "答えは13です。"
         }
     
 # Runner
