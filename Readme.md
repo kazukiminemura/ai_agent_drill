@@ -75,11 +75,15 @@ flowchart TD
     ToolCall --> Args[Arguments<br/>tool に渡す dict]
     Args --> Tool[Tool<br/>Python 関数・外部 API]
     Tool --> ToolGuardrails[Guardrails<br/>tool approval / validation]
-    ToolGuardrails --> ToolResult[Tool Result]
+    ToolGuardrails --> ToolResult[Tool Result<br/>observe]
     ToolResult --> Messages
+    Messages --> Runner
 
     RAG[RAG<br/>docs search + context] --> Tool
-    Planning[Planning<br/>plan -> act -> observe] --> Runner
+    Planning[Planning<br/>plan]
+    Runner --> Planning
+    Planning --> Runner
+    ToolResult --> Planning
 
     Runner --> Trace[Trace<br/>実行ログ]
     Trace --> Evaluation[Evaluation<br/>テスト・品質確認]
