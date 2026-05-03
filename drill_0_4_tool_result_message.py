@@ -7,4 +7,6 @@ tool_result_message = {
 }
 
 print(tool_result_message["role"])
+print(tool_result_message["content"]["tool_name"])
 print(tool_result_message["content"]["result"])
+
