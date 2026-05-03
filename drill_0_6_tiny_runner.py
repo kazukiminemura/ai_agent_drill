@@ -1,9 +1,8 @@
 def calculator(expression: str) -> int:
     if expression == "3 + 5 * 2":
         return 13
-
-    raise ValueError(f"unsupported expression: {expression}")
-
+    
+    raise ValueError(f"Unsupported expression: {expression}")
 
 class FakeLLM:
     def chat(self, messages: list[dict]) -> dict:
@@ -22,8 +21,7 @@ class FakeLLM:
             "type": "final",
             "content": "答えは13です。",
         }
-
-
+        
 def run(user_input: str) -> str:
     llm = FakeLLM()
     messages = [
@@ -50,9 +48,8 @@ def run(user_input: str) -> str:
 
     if second_response["type"] == "final":
         return second_response["content"]
+    
+    raise ValueError(f"Unsupported response: {second_response}")
 
-    raise ValueError(f"unsupported response: {second_response}")
-
-
-answer = run("3 + 5 * 2 は？")
+answer = run("What is 3 + 5 * 2?")
 print(answer)
