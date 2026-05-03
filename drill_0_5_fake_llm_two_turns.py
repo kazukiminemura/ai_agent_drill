@@ -1,6 +1,6 @@
 class FakeLLM:
     def chat(self, messages: list[dict]) -> dict:
-        has_tool_result = any(message["role"] == "tool" for message in messages)
+        has_tool_result = any(message.get("role") == "tool" for message in messages)
 
         if not has_tool_result:
             return {
@@ -20,7 +20,7 @@ class FakeLLM:
 llm = FakeLLM()
 
 first_response = llm.chat([])
-print(first_response["type"])
+print(first_response)
 
 messages = [
     {
@@ -33,5 +33,4 @@ messages = [
 ]
 
 second_response = llm.chat(messages)
-print(second_response["type"])
-print(second_response["content"])
+print(second_response)
