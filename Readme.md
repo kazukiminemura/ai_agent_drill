@@ -55,6 +55,50 @@ user
 
 AI Agent は魔法の 1 つのクラスではなく、小さな部品の組み合わせです。
 
+### 全体像
+
+まず、部品同士の関係を 1 枚で見ると次のようになります。
+
+```mermaid
+flowchart TD
+    User[User Input] --> InputGuardrails[Guardrails<br/>input check]
+    InputGuardrails --> Runner[Runner<br/>実行ループ]
+
+    Memory[Memory<br/>会話履歴・ユーザー情報] --> Runner
+    Runner --> Messages[Message<br/>user / assistant / tool]
+    Messages --> FakeLLM[FakeLLM / LLM<br/>次の行動を決める]
+
+    FakeLLM --> Response{Response Type}
+    Response -->|final| Final[Final Answer]
+    Response -->|tool_call| ToolCall[Tool Call]
+
+    ToolCall --> Args[Arguments<br/>tool に渡す dict]
+    Args --> Tool[Tool<br/>Python 関数・外部 API]
+    Tool --> ToolGuardrails[Guardrails<br/>tool approval / validation]
+    ToolGuardrails --> ToolResult[Tool Result]
+    ToolResult --> Messages
+
+    RAG[RAG<br/>docs search + context] --> Tool
+    Planning[Planning<br/>plan -> act -> observe] --> Runner
+
+    Runner --> Trace[Trace<br/>実行ログ]
+    Trace --> Evaluation[Evaluation<br/>テスト・品質確認]
+    Final --> OutputGuardrails[Guardrails<br/>output check]
+    OutputGuardrails --> UserAnswer[User Answer]
+```
+
+読み方はシンプルです。
+
+- `Runner` が中心にいて、LLM に聞く、tool を実行する、結果を履歴に戻す、を繰り返す
+- `Message` は、user 入力、assistant の tool call、tool result、final answer を同じ形式で持つ履歴
+- `FakeLLM` は練習用の LLM で、`Response Type` として `final` か `tool_call` を返す
+- `tool_call` のときは、`Arguments` を使って `Tool` を実行し、結果を `Message` に戻す
+- `Memory` は過去の会話やユーザー情報を Runner に渡す
+- `RAG` は検索用 tool として入り、外部ドキュメントを根拠として使う
+- `Planning` は Runner の動きを「計画 -> 実行 -> 観察」に広げる
+- `Guardrails` は入力、tool 実行前、出力の各ポイントで危険や不正確さを止める
+- `Trace` は実行中に何が起きたかを記録し、`Evaluation` はその記録やテストケースで品質を確認する
+
 ### Message
 
 `Message` は、会話履歴の 1 件分です。
