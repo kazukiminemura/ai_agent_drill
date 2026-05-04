@@ -1005,11 +1005,17 @@ tool 実行後の Fake LLM の返答:
 
 ### Drill 2: max_turns を入れる
 
-Agent が無限に tool を呼び続ける Fake LLM を作ります。
+Drill 1 の `Agent` / `Runner` / `Tool` class を全部もう一度書くと重いので、Drill 2 は小さい問題にします。
+
+ここでは `dict` と関数だけで、`max_turns` の考え方を練習します。
+
+**実装例ファイル**
+
+`drill_2_max_turns.py`
 
 **お題**
 
-Fake LLM が毎回これを返します。
+FakeLLM は毎回 calculator の `tool_call` を返します。
 
 ```json
 {
@@ -1021,16 +1027,50 @@ Fake LLM が毎回これを返します。
 }
 ```
 
+そのままだと Agent はずっと tool を呼び続けます。
+
+`run(user_input: str, max_turns: int = 3)` を作って、`max_turns` 回で処理を止めてください。
+
 **実装するもの**
 
+- `FakeLLM`
+- `calculator`
+- `run(user_input, max_turns=3)`
 - `max_turns`
-- `max_turns` を超えたら例外
-- 例外時のログ
+- `MaxTurnsExceededError`
+
+**回答の目安**
+
+実装部分は 30 行程度で十分です。
+
+Drill 2 では、まだ `Message` class、`Tool` class、`Agent` class、`Runner` class を作らなくてよいです。それらを全部使う練習は Drill 1 で一度やっています。
+
+**考える順番**
+
+1. `messages` に user message を入れる
+2. `for _ in range(max_turns):` で LLM 呼び出し回数を制限する
+3. FakeLLM の `tool_call` を受け取る
+4. `calculator(**response["arguments"])` を実行する
+5. assistant の tool_call と tool result を `messages` に追加する
+6. loop が終わったら `max_turns exceeded` で例外を出す
 
 **合格条件**
 
-- `max_turns=3` のとき、4 回目に進まず停止する
+- `max_turns=3` のとき、tool call は 3 回まで
 - エラー内容に `max_turns exceeded` が含まれる
+- エラー時の `messages` を確認できる
+
+**実行例**
+
+```bash
+python drill_2_max_turns.py
+```
+
+出力例:
+
+```text
+max_turns exceeded
+```
 
 ---
 
