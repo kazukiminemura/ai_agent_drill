@@ -1,7 +1,14 @@
 APPROVAL_REQUIRED = {"delete_file", "send_email"}
+KNOWN_TOOLS = {"read_file", "delete_file", "send_email"}
 
 
 def request_tool(tool_name: str, arguments: dict) -> dict:
+    if tool_name not in KNOWN_TOOLS:
+        return {
+            "status": "rejected",
+            "reason": f"unknown tool: {tool_name}",
+        }
+
     if tool_name in APPROVAL_REQUIRED:
         return {
             "status": "pending_approval",

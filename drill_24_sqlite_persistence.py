@@ -6,6 +6,9 @@ connection.execute("create table messages (session_id text, role text, content t
 
 
 def save_message(session_id: str, role: str, content: str) -> None:
+    if not session_id:
+        raise ValueError("session_id is required")
+
     connection.execute(
         "insert into messages values (?, ?, ?)",
         (session_id, role, content),
@@ -14,6 +17,9 @@ def save_message(session_id: str, role: str, content: str) -> None:
 
 
 def load_messages(session_id: str) -> list[tuple[str, str]]:
+    if not session_id:
+        raise ValueError("session_id is required")
+
     rows = connection.execute(
         "select role, content from messages where session_id = ?",
         (session_id,),

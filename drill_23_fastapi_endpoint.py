@@ -5,6 +5,9 @@ except ModuleNotFoundError:
 
 
 def agent(user_input: str) -> dict:
+    if not user_input:
+        raise ValueError("user_input is required")
+
     return {
         "answer": f"echo: {user_input}",
         "trace_id": "demo-trace",
@@ -18,6 +21,8 @@ else:
 
     @app.post("/chat")
     def chat(payload: dict) -> dict:
+        if "user_input" not in payload:
+            raise ValueError("user_input is required")
         return agent(payload["user_input"])
 
     @app.get("/traces/{trace_id}")

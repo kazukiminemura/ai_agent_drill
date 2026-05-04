@@ -29,7 +29,10 @@ def evaluate(node: ast.AST) -> int | float:
 
 def calculator(expression: str) -> int | float:
     validate_expression(expression)
-    tree = ast.parse(expression, mode="eval")
+    try:
+        tree = ast.parse(expression, mode="eval")
+    except SyntaxError as error:
+        raise ValueError("unsupported expression") from error
     return evaluate(tree)
 
 

@@ -1,6 +1,6 @@
 class FakeLLM:
-    def chat(self, messages: str) -> dict:
-        if "3 + 5 * 2" in messages:
+    def chat(self, message: str) -> dict:
+        if "3 + 5 * 2" in message:
             return {
                 "type": "tool_call",
                 "tool_name": "calculator",
@@ -10,8 +10,8 @@ class FakeLLM:
             }
 
         return {
-            "type" : "final",
-            "content": "not found the answer",
+            "type": "final",
+            "content": "計算できません。",
         }
 
 llm = FakeLLM()
@@ -20,3 +20,4 @@ response = llm.chat("what is 3 + 5 * 2?")
 print(response["type"])
 print(response["tool_name"])
 print(response["arguments"]["expression"])
+print(llm.chat("今日の天気は？")["content"])

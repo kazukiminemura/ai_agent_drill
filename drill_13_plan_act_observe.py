@@ -13,6 +13,10 @@ def search_policy() -> str:
 
 def run(state: dict) -> dict:
     observation = search_policy()
+    if not observation:
+        state["error"] = "observation is empty"
+        return state
+
     state["completed_steps"].append("検索する")
     state["observations"].append(observation)
 

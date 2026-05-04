@@ -1,5 +1,7 @@
 class ShortTermMemory:
     def __init__(self, limit: int = 4):
+        if limit < 1:
+            raise ValueError("limit must be at least 1")
         self.limit = limit
         self.messages: list[dict] = []
 

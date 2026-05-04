@@ -9,6 +9,9 @@ class TraceLogger:
         self.events: list[dict] = []
 
     def log(self, event_type: str, **data) -> None:
+        if not event_type:
+            raise ValueError("event_type is required")
+
         self.events.append({
             "trace_id": self.trace_id,
             "timestamp": datetime.now().isoformat(),

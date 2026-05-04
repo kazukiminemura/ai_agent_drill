@@ -16,6 +16,8 @@ def handle_command(text: str) -> str:
     if text == "/reset":
         history.clear()
         return "reset"
+    if text.startswith("/"):
+        return "unknown command"
     return chat(text)
 
 

@@ -1,4 +1,6 @@
 def route(user_input: str) -> dict:
+    if not user_input.strip():
+        return {"target_agent": "general_faq", "reason": "empty input"}
     if "請求" in user_input:
         return {"target_agent": "billing", "reason": "請求の問い合わせ"}
     if "ログイン" in user_input:

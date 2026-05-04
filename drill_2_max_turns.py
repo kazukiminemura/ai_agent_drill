@@ -34,6 +34,9 @@ def calculator(expression: str) -> int:
 
 
 def run(user_input: str, max_turns: int = 3) -> list[dict]:
+    if max_turns < 1:
+        raise ValueError("max_turns must be at least 1")
+
     llm = FakeLLM()
     messages = [{"role": "user", "content": user_input}]
 

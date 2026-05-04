@@ -1,14 +1,20 @@
 class FakeLLM:
     def chat(self, messages: list[dict]) -> dict:
-        has_tool_result = any(message.get("role") == "tool" for message in messages)
+        tool_results = [message for message in messages if message.get("role") == "tool"]
 
-        if not has_tool_result:
+        if not tool_results:
             return {
                 "type": "tool_call",
                 "tool_name": "calculator",
                 "arguments": {
                     "expression": "3 + 5 * 2",
                 },
+            }
+
+        if "error" in tool_results[-1]["content"]:
+            return {
+                "type": "final",
+                "content": "計算できませんでした。",
             }
 
         return {

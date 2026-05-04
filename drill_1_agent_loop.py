@@ -59,10 +59,15 @@ class Runner:
                 return RunResult(response["content"], messages)
 
             if response["type"] == "tool_call":
-                tool = find_tool(agent, response["tool_name"])
-                result = tool.func(**response["arguments"])
                 messages.append(Message("assistant", response))
-                messages.append(Message("tool", {"tool_name": tool.name, "result": result}))
+                try:
+                    tool = find_tool(agent, response["tool_name"])
+                    result = tool.func(**response["arguments"])
+                    messages.append(Message("tool", {"tool_name": tool.name, "result": result}))
+                except ValueError as error:
+                    messages.append(Message("tool", {"tool_name": response["tool_name"], "error": str(error)}))
+                    messages.append(Message("assistant", "ツール実行に失敗しました。"))
+                    return RunResult("ツール実行に失敗しました。", messages)
                 continue
 
             raise ValueError(f"unsupported response: {response}")

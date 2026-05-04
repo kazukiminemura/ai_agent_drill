@@ -1,4 +1,6 @@
 def output_guardrail(answer: dict) -> dict:
+    if "answer" not in answer:
+        return {"passed": False, "reason": "answer required"}
     if answer["answer"] == "わかりません":
         return {"passed": True}
     if not answer.get("sources"):

@@ -4,23 +4,37 @@ DOCS = {
     "account.md": "アカウント削除は設定画面から申請できます。",
 }
 
+KEYWORDS = {
+    "refund.md": ["返金", "期限"],
+    "shipping.md": ["配送", "日数"],
+    "account.md": ["アカウント", "削除"],
+}
 
-def score(query: str, text: str) -> int:
-    return sum(1 for char in query if char in text)
+
+def score(query: str, file: str) -> int:
+    return sum(1 for keyword in KEYWORDS[file] if keyword in query)
 
 
 def search_docs(query: str, top_k: int = 1) -> list[tuple[str, str]]:
     ranked = sorted(
         DOCS.items(),
-        key=lambda item: score(query, item[1]),
+        key=lambda item: score(query, item[0]),
         reverse=True,
     )
-    return ranked[:top_k]
+    return [
+        (file, text)
+        for file, text in ranked[:top_k]
+        if score(query, file) > 0
+    ]
 
 
 def answer(query: str) -> str:
-    file, text = search_docs(query)[0]
+    results = search_docs(query)
+    if not results:
+        return "見つかりませんでした。"
+    file, text = results[0]
     return f"{text} source={file}"
 
 
 print(answer("返金期限は？"))
+print(answer("価格は？"))

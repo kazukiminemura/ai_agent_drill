@@ -1,5 +1,7 @@
 class SummaryMemory:
     def __init__(self, keep_recent: int = 4):
+        if keep_recent < 1:
+            raise ValueError("keep_recent must be at least 1")
         self.keep_recent = keep_recent
         self.summary = ""
         self.messages: list[dict] = []

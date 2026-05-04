@@ -2,6 +2,9 @@ BLOCKED = ["APIキー", "rm -rf", "パスワードを取得"]
 
 
 def input_guardrail(user_input: str) -> dict:
+    if not user_input.strip():
+        return {"blocked": True, "reason": "empty input"}
+
     for word in BLOCKED:
         if word in user_input:
             return {"blocked": True, "reason": f"blocked keyword: {word}"}

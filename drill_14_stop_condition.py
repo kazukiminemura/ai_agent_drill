@@ -1,4 +1,7 @@
 def run(actions: list[dict], max_steps: int = 5) -> str:
+    if max_steps < 1:
+        raise ValueError("max_steps must be at least 1")
+
     seen_repeats = 1
     previous = None
 

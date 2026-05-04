@@ -7,13 +7,21 @@ DOCS = {
 def answer_with_source(query: str) -> dict:
     for file, text in DOCS.items():
         if "返金" in query and "返金" in text:
-            return {
+            answer = {
                 "answer": "返金は購入から30日以内に申請できます。",
                 "sources": [{"file": file, "quote": "購入から30日以内"}],
             }
+            validate_sources(answer)
+            return answer
     return {"answer": "不明です。", "sources": []}
 
 
+def validate_sources(answer: dict) -> None:
+    for source in answer.get("sources", []):
+        if source["quote"] not in DOCS[source["file"]]:
+            raise ValueError("quote not found in document")
+
+
 result = answer_with_source("返金期限は？")
-assert result["sources"][0]["quote"] in DOCS[result["sources"][0]["file"]]
 print(result)
+print(answer_with_source("営業時間は？"))

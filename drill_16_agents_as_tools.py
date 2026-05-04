@@ -11,7 +11,11 @@ def review_agent(draft: str) -> str:
 
 
 def manager(user_input: str) -> dict:
-    research = research_agent("AI Agent")
+    topic = user_input.strip()
+    if not topic:
+        raise ValueError("topic is required")
+
+    research = research_agent(topic)
     draft = writing_agent(research)
     final = review_agent(draft)
     return {
