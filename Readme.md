@@ -40,38 +40,41 @@ user input
 
 各回答例は、学習しやすいように小さく書いてあります。高度な章でも、まずは概念が動く最小実装を優先しています。
 
-| Drill | お題 | 回答例 |
-| --- | --- | --- |
-| 0.1 | FakeLLM が final を返す | `drill_0_1_fake_llm_final.py` |
-| 0.2 | FakeLLM が tool_call を返す | `drill_0_2_fake_llm_tool_call.py` |
-| 0.3 | arguments で関数を呼ぶ | `drill_0_3_tool_arguments.py` |
-| 0.4 | tool result を message にする | `drill_0_4_tool_result_message.py` |
-| 0.5 | FakeLLM を2回呼ぶ | `drill_0_5_fake_llm_two_turns.py` |
-| 0.6 | 小さい Runner を関数で作る | `drill_0_6_tiny_runner.py` |
-| 1 | FakeLLM で Agent ループを書く | `drill_1_agent_loop.py` |
-| 2 | max_turns で止める | `drill_2_max_turns.py` |
-| 3 | calculator tool | `drill_3_calculator_tool.py` |
-| 4 | dictionary search tool | `drill_4_dictionary_search_tool.py` |
-| 5 | tool error handling | `drill_5_tool_error_handling.py` |
-| 6 | TaskPlan を返す | `drill_6_task_plan.py` |
-| 7 | 壊れた JSON を repair する | `drill_7_json_repair.py` |
-| 8 | short-term memory | `drill_8_short_term_memory.py` |
-| 9 | summary memory | `drill_9_summary_memory.py` |
-| 10 | key-value memory | `drill_10_key_value_memory.py` |
-| 11 | keyword search RAG | `drill_11_keyword_search_rag.py` |
-| 12 | citation 付き回答 | `drill_12_citation_answer.py` |
-| 13 | plan -> act -> observe | `drill_13_plan_act_observe.py` |
-| 14 | stop condition | `drill_14_stop_condition.py` |
-| 15 | router agent | `drill_15_router_agent.py` |
-| 16 | agents as tools | `drill_16_agents_as_tools.py` |
-| 17 | input guardrail | `drill_17_input_guardrail.py` |
-| 18 | tool approval | `drill_18_tool_approval.py` |
-| 19 | output guardrail | `drill_19_output_guardrail.py` |
-| 20 | trace logger | `drill_20_trace_logger.py` |
-| 21 | eval dataset | `drill_21_eval_dataset.py` |
-| 22 | CLI Agent | `drill_22_cli_agent.py` |
-| 23 | FastAPI endpoint | `drill_23_fastapi_endpoint.py` |
-| 24 | SQLite persistence | `drill_24_sqlite_persistence.py` |
+「クラスとして書くもの」に名前がある Drill は、その名前のクラスを作ってください。`なし` の Drill は、まずは関数と dict だけで書いて大丈夫です。
+`FakeLLM` は本物の LLM の代わりをする練習用クラスです。Tool や Guardrail などの主役は、表で `なし` になっていれば関数で書きます。
+
+| Drill | お題 | クラスとして書くもの | 回答例 |
+| --- | --- | --- | --- |
+| 0.1 | FakeLLM が final を返す | `FakeLLM` | `drill_0_1_fake_llm_final.py` |
+| 0.2 | FakeLLM が tool_call を返す | `FakeLLM` | `drill_0_2_fake_llm_tool_call.py` |
+| 0.3 | arguments で関数を呼ぶ | なし | `drill_0_3_tool_arguments.py` |
+| 0.4 | tool result を message にする | なし | `drill_0_4_tool_result_message.py` |
+| 0.5 | FakeLLM を2回呼ぶ | `FakeLLM` | `drill_0_5_fake_llm_two_turns.py` |
+| 0.6 | 小さい Runner を関数で作る | `FakeLLM` | `drill_0_6_tiny_runner.py` |
+| 1 | FakeLLM で Agent ループを書く | `Message`, `Tool`, `Agent`, `RunResult`, `FakeLLM`, `Runner` | `drill_1_agent_loop.py` |
+| 2 | max_turns で止める | `MaxTurnsExceededError`, `FakeLLM` | `drill_2_max_turns.py` |
+| 3 | calculator tool | `FakeLLM` | `drill_3_calculator_tool.py` |
+| 4 | dictionary search tool | `FakeLLM` | `drill_4_dictionary_search_tool.py` |
+| 5 | tool error handling | なし | `drill_5_tool_error_handling.py` |
+| 6 | TaskPlan を返す | `TaskPlan`, `FakeLLM` | `drill_6_task_plan.py` |
+| 7 | 壊れた JSON を repair する | `FakeLLM` | `drill_7_json_repair.py` |
+| 8 | short-term memory | `ShortTermMemory` | `drill_8_short_term_memory.py` |
+| 9 | summary memory | `SummaryMemory` | `drill_9_summary_memory.py` |
+| 10 | key-value memory | なし | `drill_10_key_value_memory.py` |
+| 11 | keyword search RAG | なし | `drill_11_keyword_search_rag.py` |
+| 12 | citation 付き回答 | なし | `drill_12_citation_answer.py` |
+| 13 | plan -> act -> observe | なし | `drill_13_plan_act_observe.py` |
+| 14 | stop condition | なし | `drill_14_stop_condition.py` |
+| 15 | router agent | なし | `drill_15_router_agent.py` |
+| 16 | agents as tools | なし | `drill_16_agents_as_tools.py` |
+| 17 | input guardrail | なし | `drill_17_input_guardrail.py` |
+| 18 | tool approval | なし | `drill_18_tool_approval.py` |
+| 19 | output guardrail | なし | `drill_19_output_guardrail.py` |
+| 20 | trace logger | `TraceLogger` | `drill_20_trace_logger.py` |
+| 21 | eval dataset | なし | `drill_21_eval_dataset.py` |
+| 22 | CLI Agent | なし | `drill_22_cli_agent.py` |
+| 23 | FastAPI endpoint | なし | `drill_23_fastapi_endpoint.py` |
+| 24 | SQLite persistence | なし | `drill_24_sqlite_persistence.py` |
 
 ---
 
