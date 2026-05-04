@@ -2,1544 +2,413 @@
 
 Python は書けるけれど、AI Agent はまだよく分からない人のための実装ドリルです。
 
-この README では、AI Agent に必要な部品を「なぜ必要なのか」から説明し、そのあとに小さな Drill で 1 つずつ実装します。最初は本物の API を使わず、Fake LLM で Agent の制御フローだけを練習します。
-
-最終的には、Tool Calling、Memory、RAG、Planning、Guardrails、Evaluation、Production 風の API / CLI 実装まで進みます。
-
-## この教材の対象読者
-
-この教材は、次のような人を想定しています。
-
-- Python の関数、class、dict、list はある程度書ける
-- Web API や LLM API の経験は少なくてもよい
-- LangChain や Agents SDK などのフレームワークを使う前に、中身の動きを理解したい
-- 「Agent が tool を呼ぶ」と言われても、実際に何が起きているのかまだ曖昧
-- いきなり大きな Agent アプリを作るより、小さい部品から順番に理解したい
-
----
-
-## AI Agent とは何か
-
-この教材では、AI Agent を次のように考えます。
-
-```text
-ユーザーの入力を受け取り、
-LLM が次の行動を決め、
-必要なら tool を実行し、
-結果を見て、
-最終回答を返すプログラム
-```
-
-通常のチャットボットは、ユーザー入力に対して文章を返すだけです。
-
-```text
-user -> LLM -> answer
-```
-
-Agent は、その途中で tool を呼んだり、履歴を見たり、検索したり、計画を立てたりします。
-
-```text
-user
-  -> LLM
-  -> tool call
-  -> tool result
-  -> LLM
-  -> final answer
-```
-
-つまり Agent 実装の中心は、「LLM の返答を見て、次に何をするかをプログラムが判断すること」です。
-
----
-
-## AI Agent に必要な部品
-
-AI Agent は魔法の 1 つのクラスではなく、小さな部品の組み合わせです。
-
-### 全体像
-
-まず、部品同士の関係を 1 枚で見ると次のようになります。
-
-```mermaid
-flowchart TD
-    User[User Input] --> InputGuardrails[Guardrails<br/>input check]
-    InputGuardrails --> Runner[Runner<br/>実行ループ]
-
-    Memory[Memory<br/>会話履歴・ユーザー情報] --> Runner
-    Runner --> Messages[Message<br/>user / assistant / tool]
-    Messages --> FakeLLM[FakeLLM / LLM<br/>次の行動を決める]
-
-    FakeLLM --> Response{Response Type}
-    Response -->|final| Final[Final Answer]
-    Response -->|tool_call| ToolCall[Tool Call]
-
-    ToolCall --> Args[Arguments<br/>tool に渡す dict]
-    Args --> Tool[Tool<br/>Python 関数・外部 API]
-    Tool --> ToolGuardrails[Guardrails<br/>tool approval / validation]
-    ToolGuardrails --> ToolResult[Tool Result<br/>observe]
-    ToolResult --> Messages
-    Messages --> Runner
-
-    RAG[RAG<br/>docs search + context] --> Tool
-    Planning[Planning<br/>plan]
-    Runner --> Planning
-    Planning --> Runner
-    ToolResult --> Planning
-
-    Runner --> Trace[Trace<br/>実行ログ]
-    Trace --> Evaluation[Evaluation<br/>テスト・品質確認]
-    Final --> OutputGuardrails[Guardrails<br/>output check]
-    OutputGuardrails --> UserAnswer[User Answer]
-```
-
-読み方はシンプルです。
-
-- `Runner` が中心にいて、LLM に聞く、tool を実行する、結果を履歴に戻す、を繰り返す
-- `Message` は、user 入力、assistant の tool call、tool result、final answer を同じ形式で持つ履歴
-- `FakeLLM` は練習用の LLM で、`Response Type` として `final` か `tool_call` を返す
-- `tool_call` のときは、`Arguments` を使って `Tool` を実行し、結果を `Message` に戻す
-- `Memory` は過去の会話やユーザー情報を Runner に渡す
-- `RAG` は検索用 tool として入り、外部ドキュメントを根拠として使う
-- `Planning` は Runner の動きを「計画 -> 実行 -> 観察」に広げる
-- `Guardrails` は入力、tool 実行前、出力の各ポイントで危険や不正確さを止める
-- `Trace` は実行中に何が起きたかを記録し、`Evaluation` はその記録やテストケースで品質を確認する
-
-### Message
-
-`Message` は、会話履歴の 1 件分です。
-
-```python
-{
-    "role": "user",
-    "content": "3 + 5 * 2 は？",
-}
-```
-
-**なぜ必要か**
-
-LLM は、今の入力だけでなく、過去の会話や tool の結果を見て次の返答を決めます。そのため、user、assistant、tool などの発言を同じ形式で保存する必要があります。
-
-**このあと学ぶ Drill**
-
-- Drill 0.4: tool result を message 風の dict にする
-- Drill 1: `Message` class として扱う
-- Drill 8: short-term memory
-
-### Fake LLM
-
-`FakeLLM` は、本物の LLM API の代わりに決まった返答を返す練習用のクラスです。
-
-```python
-{
-    "type": "tool_call",
-    "tool_name": "calculator",
-    "arguments": {
-        "expression": "3 + 5 * 2",
-    },
-}
-```
-
-**なぜ必要か**
-
-最初から本物の API を使うと、LLM の出力ゆれ、API キー、課金、ネットワーク、SDK の書き方が同時に出てきます。まず Fake LLM を使うと、「Agent の制御フロー」だけに集中できます。
-
-**このあと学ぶ Drill**
-
-- Drill 0.1: final を返す
-- Drill 0.2: tool_call を返す
-- Drill 0.5: tool result を見て final を返す
-- Drill 0.6: 小さい Runner で一連の流れを動かす
-
-### Response Type
-
-`type` は、LLM の返答の種類です。
-
-```python
-{
-    "type": "final",
-    "content": "答えは13です。",
-}
-```
-
-または、
-
-```python
-{
-    "type": "tool_call",
-    "tool_name": "calculator",
-    "arguments": {
-        "expression": "3 + 5 * 2",
-    },
-}
-```
-
-**なぜ必要か**
-
-LLM の返答がただの文字列だと、プログラムは「最終回答なのか」「tool を呼ぶ指示なのか」を判断できません。`type` を付けることで、Runner が次の処理を分岐できます。
-
-**このあと学ぶ Drill**
-
-- Drill 0.1: `type: "final"`
-- Drill 0.2: `type: "tool_call"`
-- Drill 1: `type` を見て処理を分岐する
-
-### Tool
-
-`Tool` は、LLM から呼び出せる Python 関数です。
-
-```python
-def calculator(expression: str) -> int:
-    return 13
-```
-
-**なぜ必要か**
-
-LLM は文章生成は得意ですが、計算、ファイル操作、検索、DB 更新、外部 API 呼び出しなどは Python の関数に任せたほうが確実です。Agent は LLM と tool を組み合わせることで、文章を返すだけでなく「行動」できるようになります。
-
-**このあと学ぶ Drill**
-
-- Drill 0.3: arguments で関数を呼ぶ
-- Drill 3: calculator tool
-- Drill 4: dictionary search tool
-- Drill 5: tool error handling
-
-### Arguments
-
-`arguments` は、tool に渡す引数です。
-
-```python
-{
-    "arguments": {
-        "expression": "3 + 5 * 2",
-    }
-}
-```
-
-**なぜ必要か**
-
-Runner は、LLM が選んだ tool を Python 関数として実行します。そのとき `arguments` が dict なら、次のように呼び出せます。
-
-```python
-calculator(**arguments)
-```
-
-これは次と同じ意味です。
-
-```python
-calculator(expression="3 + 5 * 2")
-```
-
-**このあと学ぶ Drill**
-
-- Drill 0.3: `calculator(**tool_call["arguments"])`
-- Drill 3: arguments validation
-
-### Runner
-
-`Runner` は、Agent の実行ループを担当する部品です。
-
-```text
-LLM に聞く
-  -> tool_call なら tool を実行する
-  -> tool result を messages に追加する
-  -> もう一度 LLM に聞く
-  -> final なら終了する
-```
-
-**なぜ必要か**
-
-LLM は「次に何をしたいか」を返すだけです。実際に tool を探して実行し、結果を履歴に追加し、もう一度 LLM を呼ぶのはアプリ側の仕事です。その司令塔が Runner です。
-
-**どう使うか**
-
-Runner は、LLM を受け取って作ります。
-
-```python
-runner = Runner(llm=FakeLLM())
-```
-
-実行するときは、Agent と user input を渡します。
-
-```python
-result = runner.run(agent, "3 + 5 * 2 は？")
-```
-
-Runner の仕事は、だいたい次の 5 つです。
-
-```text
-1. user input を Message(role="user") として messages に入れる
-2. messages を FakeLLM に渡す
-3. LLM が tool_call を返したら、agent.tools から tool を探して実行する
-4. tool result を Message(role="tool") として messages に入れる
-5. LLM が final を返したら、RunResult を返して終了する
-```
-
-戻り値の `RunResult` には、最終回答とログが入ります。
-
-```python
-print(result.final_answer)
-
-for message in result.messages:
-    print(message.role, message.content)
-```
-
-最初は Runner を「Agent を動かす係」と考えると分かりやすいです。Agent は名前、指示、使える tool を持ちます。Runner はそれを受け取って、LLM と tool の間を行ったり来たりします。
-
-**このあと学ぶ Drill**
-
-- Drill 0.6: 小さい Runner を関数として書く
-- Drill 1: Agent ループを書く
-- Drill 2: `max_turns` で無限ループを防ぐ
-- Drill 14: stop condition
-
-### Memory
-
-`Memory` は、過去の会話やユーザー情報を保存する仕組みです。
-
-**なぜ必要か**
-
-毎回の入力だけを見る Agent は、過去に何を話したかを忘れます。会話履歴、要約、ユーザーの好みを保存することで、連続した会話ができるようになります。
-
-**このあと学ぶ Drill**
-
-- Drill 8: short-term memory
-- Drill 9: summary memory
-- Drill 10: key-value memory
-
-### RAG
-
-`RAG` は、外部ドキュメントを検索して、その内容をもとに回答する仕組みです。
-
-**なぜ必要か**
-
-LLM の記憶だけで答えると、古い情報や存在しない情報を断定することがあります。ドキュメントを検索し、根拠を回答に含めることで、業務知識や社内 FAQ に基づいた回答ができます。
-
-**このあと学ぶ Drill**
-
-- Drill 11: keyword search RAG
-- Drill 12: citation 付き回答
-
-### Planning
-
-`Planning` は、いきなり答えずに作業手順を立てる仕組みです。
-
-**なぜ必要か**
-
-複雑な依頼では、検索、要約、検証、回答作成などの複数ステップが必要になります。計画を状態として持つことで、今どこまで終わったか、次に何をするかを管理できます。
-
-**このあと学ぶ Drill**
-
-- Drill 13: plan -> act -> observe loop
-- Drill 14: stop condition
-
-### Guardrails
-
-`Guardrails` は、危険な入力、危険な tool 実行、不正確な出力を止める仕組みです。
-
-**なぜ必要か**
-
-Agent は tool を実行できるため、普通のチャットより慎重に扱う必要があります。API キーの表示、削除操作、根拠のない断定などを防ぐために、入力・tool・出力を検査します。
-
-**このあと学ぶ Drill**
-
-- Drill 17: input guardrail
-- Drill 18: tool approval
-- Drill 19: output guardrail
-
-### Trace / Evaluation
-
-`Trace` は Agent の実行ログ、`Evaluation` は Agent のテストです。
-
-**なぜ必要か**
-
-Agent は内部で LLM 呼び出し、tool call、tool result、final answer など複数のイベントを起こします。失敗したときに原因を追えるように trace が必要です。また、変更しても性能が落ちていないか確認するために eval dataset が必要です。
-
-**このあと学ぶ Drill**
-
-- Drill 20: trace logger
-- Drill 21: eval dataset
-
----
-
-## この教材で作る流れ
-
-最初から全部を作るのではなく、次の順番で少しずつ足します。
-
-```text
-Level 0: Fake LLM の返答形式を覚える
-Level 1: Agent の基本ループを作る
-Level 2: Tool Calling を増やす
-Level 3: Structured Output を扱う
-Level 4: Memory を作る
-Level 5: RAG を作る
-Level 6: Planning Agent を作る
-Level 7: Multi-Agent / Handoff を作る
-Level 8: Guardrails を作る
-Level 9: Trace / Evaluation を作る
-Level 10: CLI / API / SQLite で Production 風にまとめる
-```
-
----
+この教材では、本物の LLM API は使わず、まず FakeLLM と小さい Python 関数だけで Agent の制御フローを練習します。
 
 ## 進め方
 
-- 1 Drill ずつ小さく実装する
-- 本物の API を使う前に、Fake LLM で制御フローを確認する
-- 各 Drill の「合格条件」をテストとして書く
-- 失敗した Drill は、翌日に何も見ずに再実装する
-- Drill 1 が重く感じたら、先に Level 0 を終わらせる
+1. README のお題を読む
+2. 30行前後で自分の回答を書く
+3. 対応する回答例ファイルを見る
+4. `python ファイル名.py` で動かす
+5. 何も見ずにもう一度書く
 
----
+最初から大きな Agent framework を作る必要はありません。各 Drill は、ひとつの考え方だけを小さく練習する問題です。
 
-## 導入: なぜ Fake LLM は dict を返すのか
+## 基本の流れ
 
-Fake LLM は、ただの文字列ではなく `dict` を返します。
-
-```python
-{
-    "type": "final",
-    "content": "こんにちは！",
-}
-```
-
-これは Runner が「次に何をすればいいか」を判断できるようにするためです。
-
-もし Fake LLM が文字列だけを返した場合、人間には意味が分かっても、プログラムには判断材料が足りません。
-
-```python
-"こんにちは！"
-```
-
-これだけだと、Runner は次のことを判定できません。
-
-- これは最終回答なのか
-- tool を呼ぶ指示なのか
-- エラーなのか
-- まだ処理を続けるべきなのか
-
-そこで、LLM の返答には `type` を付けます。
-
-```python
-{
-    "type": "final",
-    "content": "こんにちは！",
-}
-```
-
-この形なら Runner はこう書けます。
-
-```python
-if response["type"] == "final":
-    print(response["content"])
-```
-
-tool を呼びたいときは、別の `type` を返します。
-
-```python
-{
-    "type": "tool_call",
-    "tool_name": "calculator",
-    "arguments": {
-        "expression": "3 + 5 * 2",
-    },
-}
-```
-
-この形なら Runner はこう書けます。
-
-```python
-if response["type"] == "tool_call":
-    tool_name = response["tool_name"]
-    arguments = response["arguments"]
-```
-
-つまり、Fake LLM の返答は「文章」ではなく「プログラムが読める命令」として作ります。
-
----
-
-## `type` と `role` の違い
-
-ここで混乱しやすい言葉が 2 つあります。
+Agent の中心は、この繰り返しです。
 
 ```text
-type = LLM の返答の種類
-role = 会話履歴の中の発言者
+user input
+  -> FakeLLM
+  -> tool_call なら Python 関数を実行
+  -> tool result を messages に追加
+  -> FakeLLM
+  -> final なら終了
 ```
 
-`type` は、LLM が「次に何をしたいか」を表します。
+よく出る言葉は次の通りです。
 
-```python
-{
-    "type": "tool_call",
-    "tool_name": "calculator",
-    "arguments": {
-        "expression": "3 + 5 * 2",
-    },
-}
-```
+- `type`: LLM の返答の種類。`final` または `tool_call`
+- `role`: messages の発言者。`user` / `assistant` / `tool` / `system`
+- `tool_call`: LLM が tool 実行を依頼する dict
+- `arguments`: tool に渡す引数 dict
+- `messages`: user、assistant、tool の履歴
+- `max_turns`: 終わらない Agent を止める上限
 
-これは「calculator tool を呼んでほしい」という LLM から Runner への指示です。
+## Drill 一覧
 
-`role` は、履歴の 1 件が「誰の発言か」を表します。
+各回答例は、学習しやすいように小さく書いてあります。高度な章でも、まずは概念が動く最小実装を優先しています。
 
-```python
-{
-    "role": "tool",
-    "content": {
-        "tool_name": "calculator",
-        "result": 13,
-    },
-}
-```
-
-これは「calculator tool の実行結果が 13 だった」という履歴です。
-
-つまり、見る場所が違います。
-
-```python
-response["type"]       # LLM の返答を見る
-message["role"]        # 会話履歴の 1 件を見る
-```
-
-Agent の流れにすると、こうなります。
-
-```text
-1. LLM が {"type": "tool_call", ...} を返す
-2. Runner が calculator を実行する
-3. Runner が {"role": "tool", "content": {"result": 13}} を履歴に追加する
-4. LLM が履歴を見て {"type": "final", ...} を返す
-```
-
-Drill 0.1 と 0.2 では `type` を練習します。Drill 0.4 で `role` が出てきます。Drill 0.5 で、その 2 つが初めてつながります。Drill 0.6 で、ここまでの流れを小さい Runner にまとめます。
+| Drill | お題 | 回答例 |
+| --- | --- | --- |
+| 0.1 | FakeLLM が final を返す | `drill_0_1_fake_llm_final.py` |
+| 0.2 | FakeLLM が tool_call を返す | `drill_0_2_fake_llm_tool_call.py` |
+| 0.3 | arguments で関数を呼ぶ | `drill_0_3_tool_arguments.py` |
+| 0.4 | tool result を message にする | `drill_0_4_tool_result_message.py` |
+| 0.5 | FakeLLM を2回呼ぶ | `drill_0_5_fake_llm_two_turns.py` |
+| 0.6 | 小さい Runner を関数で作る | `drill_0_6_tiny_runner.py` |
+| 1 | FakeLLM で Agent ループを書く | `drill_1_agent_loop.py` |
+| 2 | max_turns で止める | `drill_2_max_turns.py` |
+| 3 | calculator tool | `drill_3_calculator_tool.py` |
+| 4 | dictionary search tool | `drill_4_dictionary_search_tool.py` |
+| 5 | tool error handling | `drill_5_tool_error_handling.py` |
+| 6 | TaskPlan を返す | `drill_6_task_plan.py` |
+| 7 | 壊れた JSON を repair する | `drill_7_json_repair.py` |
+| 8 | short-term memory | `drill_8_short_term_memory.py` |
+| 9 | summary memory | `drill_9_summary_memory.py` |
+| 10 | key-value memory | `drill_10_key_value_memory.py` |
+| 11 | keyword search RAG | `drill_11_keyword_search_rag.py` |
+| 12 | citation 付き回答 | `drill_12_citation_answer.py` |
+| 13 | plan -> act -> observe | `drill_13_plan_act_observe.py` |
+| 14 | stop condition | `drill_14_stop_condition.py` |
+| 15 | router agent | `drill_15_router_agent.py` |
+| 16 | agents as tools | `drill_16_agents_as_tools.py` |
+| 17 | input guardrail | `drill_17_input_guardrail.py` |
+| 18 | tool approval | `drill_18_tool_approval.py` |
+| 19 | output guardrail | `drill_19_output_guardrail.py` |
+| 20 | trace logger | `drill_20_trace_logger.py` |
+| 21 | eval dataset | `drill_21_eval_dataset.py` |
+| 22 | CLI Agent | `drill_22_cli_agent.py` |
+| 23 | FastAPI endpoint | `drill_23_fastapi_endpoint.py` |
+| 24 | SQLite persistence | `drill_24_sqlite_persistence.py` |
 
 ---
 
-## Fake LLM の返答を書くお作法
+## Level 0: Agent の材料
 
-Fake LLM の返答は、最初は次の 2 種類だけ覚えれば十分です。
+### Drill 0.1: FakeLLM が final を返す
 
-### 1. 最終回答を返すとき
-
-ユーザーに返す文章が完成したときは、`type` を `final` にします。
+FakeLLM に `こんにちは` と渡したら、次の dict を返してください。
 
 ```python
-{
-    "type": "final",
-    "content": "答えは13です。",
-}
+{"type": "final", "content": "こんにちは！"}
 ```
 
-**意味**
+合格条件:
 
-- `type`: 返答の種類
-- `final`: これで処理を終了してよい
-- `content`: ユーザーに見せる最終回答
+- `response["type"] == "final"`
+- `response["content"]` を表示できる
 
-**Runner 側の処理**
+回答例: `drill_0_1_fake_llm_final.py`
+
+### Drill 0.2: FakeLLM が tool_call を返す
+
+FakeLLM に `3 + 5 * 2 は？` と渡したら、calculator の tool_call を返してください。
+
+合格条件:
+
+- `type` が `tool_call`
+- `tool_name` が `calculator`
+- `arguments["expression"]` が `3 + 5 * 2`
+
+回答例: `drill_0_2_fake_llm_tool_call.py`
+
+### Drill 0.3: arguments で関数を呼ぶ
+
+`calculator(expression: str)` を作り、tool_call の `arguments` を `calculator(**arguments)` で渡してください。
+
+合格条件:
+
+- `3 + 5 * 2` の結果が `13`
+- 引数名は `expression`
+
+回答例: `drill_0_3_tool_arguments.py`
+
+### Drill 0.4: tool result を message にする
+
+tool の結果を messages に入れる dict にしてください。
 
 ```python
-if response["type"] == "final":
-    final_answer = response["content"]
+{"role": "tool", "content": {"tool_name": "calculator", "result": 13}}
 ```
 
-### 2. tool を呼びたいとき
-
-LLM が自分で答えず、tool に処理を任せたいときは、`type` を `tool_call` にします。
-
-```python
-{
-    "type": "tool_call",
-    "tool_name": "calculator",
-    "arguments": {
-        "expression": "3 + 5 * 2",
-    },
-}
-```
-
-**意味**
-
-- `type`: 返答の種類
-- `tool_call`: tool を呼んでほしい
-- `tool_name`: 呼びたい tool の名前
-- `arguments`: tool に渡す引数
-
-**Runner 側の処理**
-
-```python
-if response["type"] == "tool_call":
-    tool_name = response["tool_name"]
-    arguments = response["arguments"]
-    result = calculator(**arguments)
-```
-
-### 返答を書くときのルール
-
-- 必ず `type` を入れる
-- 最終回答なら `type: "final"` と `content` を入れる
-- tool 呼び出しなら `type: "tool_call"`、`tool_name`、`arguments` を入れる
-- `arguments` は必ず dict にする
-- `arguments` の key は、呼び出す関数の引数名と合わせる
-
-例えば、calculator がこう定義されているなら、
-
-```python
-def calculator(expression: str) -> int:
-    ...
-```
-
-`arguments` はこう書きます。
-
-```python
-{
-    "arguments": {
-        "expression": "3 + 5 * 2",
-    }
-}
-```
-
-これは、Runner があとで次のように呼び出すためです。
-
-```python
-calculator(**arguments)
-```
-
-`**arguments` は dict を関数の引数として展開します。
-
-```python
-calculator(**{"expression": "3 + 5 * 2"})
-```
-
-これは次と同じ意味です。
-
-```python
-calculator(expression="3 + 5 * 2")
-```
-
----
-
-## Level 0: Agent の材料を分解して覚える
-
-Drill 1 は「最初の統合問題」です。いきなり `Message`、`Tool`、`Agent`、`Runner`、`FakeLLM` を全部考えると負荷が高いので、まずは部品を 1 つずつ練習します。
-
-### Drill 0.1: Fake LLM が final を返す
-
-LLM の返答を、ただの `dict` として扱う練習です。
-
-**実装例ファイル**
-
-`drill_0_1_fake_llm_final.py`
-
-**お題**
-
-Fake LLM に `こんにちは` と渡したら、final answer の dict を返します。
-
-**実装例**
-
-```python
-class FakeLLM:
-    def chat(self, messages: str) -> dict:
-        return {
-            "type": "final",
-            "content": "こんにちは！",
-        }
-
-
-llm = FakeLLM()
-response = llm.chat("こんにちは")
-
-print(response)
-print(response["content"])
-```
-
-**合格条件**
-
-- `response["type"]` が `final`
-- `response["content"]` が `こんにちは！`
-- まずは messages や Runner は作らない
-
-### Drill 0.2: Fake LLM が tool_call を返す
-
-LLM が「自分で計算する」のではなく、「tool を呼んで」と返す感覚をつかみます。
-
-**実装例ファイル**
-
-`drill_0_2_fake_llm_tool_call.py`
-
-**お題**
-
-Fake LLM に `3 + 5 * 2 は？` と渡したら、calculator 用の tool call を返します。
-
-**実装例**
-
-```python
-class FakeLLM:
-    def chat(self, messages: str) -> dict:
-        return {
-            "type": "tool_call",
-            "tool_name": "calculator",
-            "arguments": {
-                "expression": "3 + 5 * 2",
-            },
-        }
-
-
-llm = FakeLLM()
-response = llm.chat("3 + 5 * 2 は？")
-
-print(response["type"])
-print(response["tool_name"])
-print(response["arguments"]["expression"])
-```
-
-**合格条件**
-
-- `response["type"]` が `tool_call`
-- `response["tool_name"]` が `calculator`
-- `response["arguments"]["expression"]` が `3 + 5 * 2`
-
-### Drill 0.3: tool_call の arguments で関数を呼ぶ
-
-`arguments` の dict を使って、Python の関数を呼ぶ練習です。
-
-**実装例ファイル**
-
-`drill_0_3_tool_arguments.py`
-
-**お題**
-
-tool_call から `expression` を取り出し、calculator を実行します。
-
-**実装例**
-
-```python
-def calculator(expression: str) -> int:
-    if expression == "3 + 5 * 2":
-        return 13
-
-    raise ValueError(f"unsupported expression: {expression}")
-
-
-tool_call = {
-    "tool_name": "calculator",
-    "arguments": {
-        "expression": "3 + 5 * 2",
-    },
-}
-
-result = calculator(**tool_call["arguments"])
-
-print(result)
-```
-
-**合格条件**
-
-- 出力が `13`
-- `calculator("3 + 5 * 2")` ではなく、`calculator(**tool_call["arguments"])` で呼ぶ
-
-### Drill 0.4: tool result を message 風の dict にする
-
-tool の実行結果を、次の LLM 呼び出しに渡せる形にします。
-
-ここでは `type` ではなく `role` を使います。理由は、これは LLM の返答ではなく、「履歴に入れる message」だからです。
-
-**実装例ファイル**
-
-`drill_0_4_tool_result_message.py`
-
-**お題**
-
-calculator の結果を tool result message として保存します。
-
-**実装例**
-
-```python
-tool_result_message = {
-    "role": "tool",
-    "content": {
-        "tool_name": "calculator",
-        "result": 13,
-    },
-}
-
-print(tool_result_message["role"])
-print(tool_result_message["content"]["tool_name"])
-print(tool_result_message["content"]["result"])
-```
-
-**合格条件**
+合格条件:
 
 - `role` が `tool`
-- `content["tool_name"]` が `calculator`
-- `content["result"]` が `13`
+- `content` に tool 名と結果が入る
 
-### Drill 0.5: 2 回呼ぶ Fake LLM を作る
+回答例: `drill_0_4_tool_result_message.py`
 
-1 回目は `tool_call`、tool result がある 2 回目は `final` を返すようにします。
+### Drill 0.5: FakeLLM を2回呼ぶ
 
-ここでやることは 1 つだけです。
+messages に tool result がなければ `tool_call`、あれば `final` を返す FakeLLM を作ってください。
 
-```text
-messages の中に role が tool の message があるかを見る
-```
+合格条件:
 
-なければ、まだ tool を実行していないので `{"type": "tool_call", ...}` を返します。あれば、tool の結果を見たあとだと分かるので `{"type": "final", ...}` を返します。
+- 1回目は `tool_call`
+- 2回目は `final`
 
-**実装例ファイル**
-
-`drill_0_5_fake_llm_two_turns.py`
-
-**お題**
-
-messages に tool result がなければ tool_call、あれば final を返します。
-
-**実装例**
-
-```python
-class FakeLLM:
-    def chat(self, messages: list[dict]) -> dict:
-        has_tool_result = any(message.get("role") == "tool" for message in messages)
-
-        if not has_tool_result:
-            return {
-                "type": "tool_call",
-                "tool_name": "calculator",
-                "arguments": {
-                    "expression": "3 + 5 * 2",
-                },
-            }
-
-        return {
-            "type": "final",
-            "content": "答えは13です。",
-        }
-
-
-llm = FakeLLM()
-
-first_response = llm.chat([])
-print(first_response)
-
-messages = [
-    {
-        "role": "tool",
-        "content": {
-            "tool_name": "calculator",
-            "result": 13,
-        },
-    }
-]
-
-second_response = llm.chat(messages)
-print(second_response)
-```
-
-**合格条件**
-
-- messages が空なら `tool_call` を返す
-- messages に `{"role": "tool", ...}` があれば `final` を返す
-- `type` は LLM の返答、`role` は履歴の発言者として使い分ける
+回答例: `drill_0_5_fake_llm_two_turns.py`
 
 ### Drill 0.6: 小さい Runner を関数で作る
 
-Drill 0.1 から 0.5 までで作った部品を、1 つの関数にまとめます。
+`run(user_input: str) -> str` を作り、user message、tool_call、tool result、final までを1つの関数で動かしてください。
 
-ここではまだ `Message` class、`Tool` class、`Agent` class は作りません。まずは dict と関数だけで、「Runner が何をしているのか」を見える形にします。
-
-**実装例ファイル**
-
-`drill_0_6_tiny_runner.py`
-
-**お題**
-
-`run(user_input: str) -> str` を作り、次の流れを 1 つの関数で動かします。
-
-```text
-1. messages に user message を入れる
-2. FakeLLM に messages を渡す
-3. tool_call なら calculator を実行する
-4. tool result message を messages に追加する
-5. もう一度 FakeLLM に messages を渡す
-6. final なら content を返す
-```
-
-**実装例**
-
-```python
-def calculator(expression: str) -> int:
-    if expression == "3 + 5 * 2":
-        return 13
-
-    raise ValueError(f"unsupported expression: {expression}")
-
-
-class FakeLLM:
-    def chat(self, messages: list[dict]) -> dict:
-        has_tool_result = any(message.get("role") == "tool" for message in messages)
-
-        if not has_tool_result:
-            return {
-                "type": "tool_call",
-                "tool_name": "calculator",
-                "arguments": {
-                    "expression": "3 + 5 * 2",
-                },
-            }
-
-        return {
-            "type": "final",
-            "content": "答えは13です。",
-        }
-
-
-def run(user_input: str) -> str:
-    llm = FakeLLM()
-    messages = [
-        {
-            "role": "user",
-            "content": user_input,
-        }
-    ]
-
-    first_response = llm.chat(messages)
-
-    if first_response["type"] == "tool_call":
-        tool_result = calculator(**first_response["arguments"])
-
-        messages.append({
-            "role": "tool",
-            "content": {
-                "tool_name": first_response["tool_name"],
-                "result": tool_result,
-            },
-        })
-
-    second_response = llm.chat(messages)
-
-    if second_response["type"] == "final":
-        return second_response["content"]
-
-    raise ValueError(f"unsupported response: {second_response}")
-
-
-answer = run("3 + 5 * 2 は？")
-print(answer)
-```
-
-**合格条件**
+合格条件:
 
 - 出力が `答えは13です。`
-- `run(...)` の中で FakeLLM を 2 回呼ぶ
-- tool result を `{"role": "tool", ...}` として messages に追加する
-- `final` の `content` を返す
-- ここまで来てから Drill 1 に進む
+- FakeLLM を2回呼ぶ
+- tool result を messages に追加する
+
+回答例: `drill_0_6_tiny_runner.py`
 
 ---
 
-## Level 1: Agent の骨格を作る
+## Level 1: Agent の骨格
 
-### Drill 1: Fake LLM で Agent ループを書く
+### Drill 1: FakeLLM で Agent ループを書く
 
-本物の API は使わず、Fake LLM を作って Agent の流れだけ実装します。Level 0 で作った部品を、`Message`、`Tool`、`Agent`、`Runner` にまとめる統合問題です。
+Drill 0.6 の dict 実装を、`Message`、`Tool`、`Agent`、`Runner` に分けてください。
 
-Drill 1 では、最終的に次のように使える形を目指します。
+合格条件:
 
-```python
-runner = Runner(llm=FakeLLM())
-result = runner.run(agent, "3 + 5 * 2 は？")
+- `Runner.run(agent, user_input)` で動く
+- ログが user、assistant tool_call、tool、assistant final の順に残る
+- 最終回答が `答えは13です。`
 
-print(result.final_answer)
-```
-
-`runner.run(...)` の中で、user message の追加、LLM 呼び出し、tool 実行、tool result の追加、final answer の受け取りまでをまとめて行います。
-
-**実装例ファイル**
-
-`drill_1_agent_loop.py`
-
-**お題**
-
-ユーザー入力:
-
-```text
-3 + 5 * 2 は？
-```
-
-Fake LLM の 1 回目の返答:
-
-```json
-{
-  "type": "tool_call",
-  "tool_name": "calculator",
-  "arguments": {
-    "expression": "3 + 5 * 2"
-  }
-}
-```
-
-tool 実行後の Fake LLM の返答:
-
-```json
-{
-  "type": "final",
-  "content": "答えは13です。"
-}
-```
-
-**実装するもの**
-
-- `Message`
-- `Tool`
-- `Agent`
-- `Runner`
-- `calculator tool`
-- `FakeLLM`
-
-**合格条件**
-
-- 入力: `3 + 5 * 2 は？`
-- 出力: `答えは13です。`
-- ログが次の順番で残る
-  1. user message
-  2. assistant tool_call
-  3. tool result
-  4. assistant final
+回答例: `drill_1_agent_loop.py`
 
 ### Drill 2: max_turns を入れる
 
-Drill 1 の `Agent` / `Runner` / `Tool` class を全部もう一度書くと重いので、Drill 2 は小さい問題にします。
+FakeLLM が毎回 calculator の `tool_call` を返すようにします。`run(user_input, max_turns=3)` で、終わらない処理を止めてください。
 
-ここでは `dict` と関数だけで、`max_turns` の考え方を練習します。
+合格条件:
 
-**実装例ファイル**
+- `max_turns=3` なら tool_call は3回まで
+- エラー文に `max_turns exceeded` が含まれる
+- エラー時の messages を確認できる
 
-`drill_2_max_turns.py`
-
-**お題**
-
-FakeLLM は毎回 calculator の `tool_call` を返します。
-
-```json
-{
-  "type": "tool_call",
-  "tool_name": "calculator",
-  "arguments": {
-    "expression": "1 + 1"
-  }
-}
-```
-
-そのままだと Agent はずっと tool を呼び続けます。
-
-`run(user_input: str, max_turns: int = 3)` を作って、`max_turns` 回で処理を止めてください。
-
-**実装するもの**
-
-- `FakeLLM`
-- `calculator`
-- `run(user_input, max_turns=3)`
-- `max_turns`
-- `MaxTurnsExceededError`
-
-**回答の目安**
-
-実装部分は 30 行程度で十分です。
-
-Drill 2 では、まだ `Message` class、`Tool` class、`Agent` class、`Runner` class を作らなくてよいです。それらを全部使う練習は Drill 1 で一度やっています。
-
-**考える順番**
-
-1. `messages` に user message を入れる
-2. `for _ in range(max_turns):` で LLM 呼び出し回数を制限する
-3. FakeLLM の `tool_call` を受け取る
-4. `calculator(**response["arguments"])` を実行する
-5. assistant の tool_call と tool result を `messages` に追加する
-6. loop が終わったら `max_turns exceeded` で例外を出す
-
-**合格条件**
-
-- `max_turns=3` のとき、tool call は 3 回まで
-- エラー内容に `max_turns exceeded` が含まれる
-- エラー時の `messages` を確認できる
-
-**実行例**
-
-```bash
-python drill_2_max_turns.py
-```
-
-出力例:
-
-```text
-max_turns exceeded
-```
+回答例: `drill_2_max_turns.py`
 
 ---
 
-## Level 2: Tool Calling を体に覚えさせる
-
-Tool use は、多くの Agent 実装の中心です。モデルが tool call を返し、アプリが実行して tool result を返す形を練習します。
+## Level 2: Tool Calling
 
 ### Drill 3: calculator tool
 
-**お題**
+式を受け取って計算する `calculator(expression)` を作ってください。
 
-次の入力に対応します。
+合格条件:
 
-```text
-12 * 8 は？
-100 / 4 + 7 は？
-2 ** 10 は？
-```
+- `12 * 8` が `96`
+- 危険な文字列は拒否する
+- `import`、`open`、`exec`、`eval`、`__` を拒否する
 
-**実装するもの**
-
-- tool schema
-- arguments validation
-- tool execution
-- tool result message
-
-**制約**
-
-危険な式は実行しない。
-
-禁止:
-
-- `import`
-- `open`
-- `exec`
-- `eval` の直接使用
-- `__` が含まれる式
-
-**合格条件**
-
-- `12 * 8 は？` -> calculator が呼ばれる
-- `こんにちは` -> calculator は呼ばれない
-- `__import__('os')` -> 拒否される
+回答例: `drill_3_calculator_tool.py`
 
 ### Drill 4: dictionary search tool
 
-小さな辞書を検索する Agent を作ります。
+小さな FAQ dict を検索する `search_faq(query)` を作ってください。
 
-**データ**
+合格条件:
 
-```python
-FAQ = {
-    "refund": "返金は購入から30日以内に申請できます。",
-    "shipping": "通常配送は3〜5営業日です。",
-    "password": "パスワード再設定ページから変更できます。",
-}
-```
+- 返金、配送、パスワードの質問に答える
+- 未知の質問では `見つかりませんでした` を返す
 
-**入力例**
-
-```text
-返金について教えて
-配送にはどれくらいかかる？
-パスワードを忘れました
-```
-
-**実装するもの**
-
-- `search_faq tool`
-- query string の validation
-- 見つからないときの fallback
-
-**合格条件**
-
-- 返金 -> refund tool result を使う
-- 配送 -> shipping tool result を使う
-- 未知の質問 -> `見つかりませんでした` を含む
+回答例: `drill_4_dictionary_search_tool.py`
 
 ### Drill 5: tool error handling
 
-天気 API 風の mock tool を作ります。
+天気 tool が `ValueError` を出したとき、落とさず tool error と final answer を messages に残してください。
 
-**tool**
+合格条件:
 
-```python
-def get_weather(city: str) -> dict:
-    ...
-```
-
-**挙動**
-
-- Tokyo -> `{"city": "Tokyo", "weather": "sunny", "temp": 22}`
-- Osaka -> `{"city": "Osaka", "weather": "cloudy", "temp": 20}`
-- Unknown -> `ValueError` を raise
-
-**実装するもの**
-
-- tool 例外を握りつぶさない
-- tool error message を履歴に追加
-- LLM が最終回答でエラーを説明できるようにする
-
-**合格条件**
-
-- Tokyo の天気 -> 成功
-- 存在しない都市 -> tool error がログに残る
+- Tokyo は成功
+- Unknown は tool error が残る
 - 最終回答に `取得できませんでした` が含まれる
+
+回答例: `drill_5_tool_error_handling.py`
 
 ---
 
-## Level 3: Structured Output を反復する
+## Level 3: Structured Output
 
-自然文を後から parse するより、最初から JSON や Pydantic model として受ける形を練習します。
+### Drill 6: TaskPlan を返す
 
-### Drill 6: TaskPlan を返す Agent
+ユーザー依頼から `goal`、`steps`、`tools_needed`、`risk_level` を持つ TaskPlan を作ってください。
 
-ユーザーの依頼から、作業計画を JSON で返します。
+合格条件:
 
-**入力**
+- `steps` が3個以上
+- `risk_level` は `low` / `medium` / `high`
+- validation できる
 
-```text
-ブログ記事を調査して、構成を作って、下書きまで作ってください
-```
-
-**出力 schema**
-
-```python
-class TaskPlan(BaseModel):
-    goal: str
-    steps: list[str]
-    tools_needed: list[str]
-    risk_level: Literal["low", "medium", "high"]
-```
-
-**合格条件**
-
-- JSON として parse できる
-- Pydantic validation が通る
-- `steps` が 3 個以上ある
-- `risk_level` が `low` / `medium` / `high` のどれか
+回答例: `drill_6_task_plan.py`
 
 ### Drill 7: 壊れた JSON を repair する
 
-**お題**
+壊れた JSON を parse し、失敗したら FakeLLM に repair させて再試行してください。
 
-Fake LLM が壊れた JSON を返します。
+合格条件:
 
-```text
-{ goal: "調査する", steps: ["検索", "要約",], }
-```
+- retry 回数を持つ
+- parse error を記録する
+- valid JSON を dict にできる
 
-**実装するもの**
-
-- parse 失敗を検出
-- repair prompt を作る
-- もう一度 LLM に投げる
-- retry 回数制限
-
-**合格条件**
-
-- `retry=2` 以内に valid JSON になる
-- retry 超過時は例外
-- parse error のログが残る
+回答例: `drill_7_json_repair.py`
 
 ---
 
-## Level 4: Memory を作る
+## Level 4: Memory
 
 ### Drill 8: short-term memory
 
-会話履歴を保持する Memory を作ります。
+messages を保存し、直近 N 件だけ取り出す Memory を作ってください。
 
-**実装するもの**
+合格条件:
 
-- messages を保存
-- 直近 N 件だけ取り出す
-- `system` / `user` / `assistant` / `tool` の role を区別
+- `limit=4` なら最新4件だけ返す
+- tool message も保存できる
 
-**合格条件**
-
-- `N=4` のとき、最新 4 件だけ prompt に入る
-- tool result も履歴に残る
-- 古い履歴は prompt に入らない
+回答例: `drill_8_short_term_memory.py`
 
 ### Drill 9: summary memory
 
-古い会話を summary に圧縮します。
+messages が増えたら古いものを summary にまとめ、prompt には summary と最新 messages だけ入れてください。
 
-**実装するもの**
+合格条件:
 
-- messages が 10 件を超えたら summary を更新
-- summary + 最新 messages で prompt を作る
-- summary 更新も Fake LLM でテスト
+- 10件を超えたら summary ができる
+- prompt が summary + recent になる
 
-**合格条件**
-
-- messages が 20 件あっても prompt には summary + 最新 N 件だけ入る
-- summary にユーザーの好みが残る
+回答例: `drill_9_summary_memory.py`
 
 ### Drill 10: key-value memory
 
-ユーザーの好みを保存する Agent を作ります。
+ユーザーの好みを保存・読み出しできる小さな memory store を作ってください。
 
-**入力例**
+合格条件:
 
-```text
-私はPythonが好きです
-私は朝に集中できます
-前に言った好きな言語は？
-```
+- `Pythonが好き` を保存する
+- 後続質問で `Python` を返す
+- 未保存の情報は作らない
 
-**実装するもの**
-
-- `save_memory tool`
-- `read_memory tool`
-- memory store
-
-**合格条件**
-
-- `Pythonが好き` が保存される
-- 後続質問で memory tool が呼ばれる
-- 保存していない情報は勝手に作らない
+回答例: `drill_10_key_value_memory.py`
 
 ---
 
-## Level 5: RAG を作る
+## Level 5: RAG
 
 ### Drill 11: keyword search RAG
 
-まず embedding なしで作ります。
+小さな docs dict を作り、query に近い document を keyword score で選んでください。
 
-**データ**
+合格条件:
 
-```text
-docs/
-  refund.md
-  shipping.md
-  account.md
-```
+- `返金期限は？` で `refund.md`
+- 回答に source が入る
 
-**実装するもの**
-
-- markdown 読み込み
-- chunk 分割
-- keyword score
-- top_k 取得
-- context 付き回答
-
-**合格条件**
-
-- `返金期限は？` -> `refund.md` が top1
-- `配送日数は？` -> `shipping.md` が top1
-- `アカウント削除は？` -> `account.md` が top1
+回答例: `drill_11_keyword_search_rag.py`
 
 ### Drill 12: citation 付き回答
 
-RAG 回答に source を付けます。
+回答に `sources` を付け、quote が document 内に存在することを確認してください。
 
-**出力形式**
-
-```json
-{
-  "answer": "...",
-  "sources": [
-    {
-      "file": "refund.md",
-      "quote": "購入から30日以内"
-    }
-  ]
-}
-```
-
-**合格条件**
+合格条件:
 
 - `sources` が空でない
-- `quote` が実際の document 内に存在する
-- document にないことは `不明` と答える
+- `quote` が document 内に存在する
+- 不明なら `不明です` と答える
+
+回答例: `drill_12_citation_answer.py`
 
 ---
 
-## Level 6: Planning Agent を作る
+## Level 6: Planning
 
-### Drill 13: plan -> act -> observe loop
+### Drill 13: plan -> act -> observe
 
-Agent が計画を立て、tool を使い、観察結果をもとに次の行動を決めます。
+state に goal、plan、completed_steps、observations、final_answer を持たせ、検索結果を観察して final を作ってください。
 
-**入力**
+合格条件:
 
-```text
-返金ポリシーを調べて、ユーザー向けに短く説明して
-```
+- plan がある
+- observation が追加される
+- final_answer で終了する
 
-**実装する状態**
-
-```python
-class AgentState(BaseModel):
-    goal: str
-    plan: list[str]
-    completed_steps: list[str]
-    observations: list[str]
-    final_answer: str | None
-```
-
-**合格条件**
-
-1. plan が作られる
-2. search tool が呼ばれる
-3. observation が追加される
-4. `final_answer` で終了する
+回答例: `drill_13_plan_act_observe.py`
 
 ### Drill 14: stop condition
 
-Agent が「まだ調べます」を繰り返す状態を防ぎます。
+同じ action が続く場合や max_steps を超える場合に停止してください。
 
-**実装するもの**
+合格条件:
 
-- `max_steps`
-- `goal_satisfied` 判定
-- repeated_action 検出
+- 同じ action が3回続いたら停止
+- max_steps 超過で停止
+- 停止理由を返す
 
-**合格条件**
-
-- 同じ tool + 同じ arguments が 3 回続いたら停止
-- `max_steps` を超えたら停止
-- 停止理由がログに残る
+回答例: `drill_14_stop_condition.py`
 
 ---
 
-## Level 7: Multi-Agent / Handoff
-
-Handoff は、ある Agent が別の専門 Agent へタスクを委譲するパターンです。
+## Level 7: Multi-Agent
 
 ### Drill 15: router agent
 
-問い合わせを 3 つの Agent に振り分けます。
+問い合わせを billing、tech_support、general_faq のどれかに振り分けてください。
 
-**振り分け先**
+合格条件:
 
-- `BillingAgent`
-- `TechSupportAgent`
-- `GeneralFAQAgent`
+- 請求は billing
+- ログインは tech_support
+- その他は general_faq
+- handoff log が残る
 
-**入力例**
-
-```text
-請求書を再発行したい
-ログインできません
-営業時間を教えて
-```
-
-**実装するもの**
-
-- router
-- route schema
-- handoff
-- handoff log
-
-**route schema**
-
-```python
-class RouteDecision(BaseModel):
-    target_agent: Literal["billing", "tech_support", "general_faq"]
-    reason: str
-```
-
-**合格条件**
-
-- 請求 -> BillingAgent
-- ログイン不可 -> TechSupportAgent
-- 営業時間 -> GeneralFAQAgent
-- handoff 先の Agent 名がログに残る
+回答例: `drill_15_router_agent.py`
 
 ### Drill 16: agents as tools
 
-ManagerAgent が専門 Agent を tool として呼び出します。
+Manager が Research、Writing、Review の3つの Agent 関数を順番に呼んでください。
 
-**専門 Agent**
+合格条件:
 
-- `ResearchAgent`
-- `WritingAgent`
-- `ReviewAgent`
+- 3つの agent tool が順に呼ばれる
+- 前の出力が次に渡る
+- final に review 結果が入る
 
-**入力**
-
-```text
-AI Agentについて短い記事を書いて
-```
-
-**実装する流れ**
-
-```text
-Manager
-  -> ResearchAgent tool
-  -> WritingAgent tool
-  -> ReviewAgent tool
-  -> final
-```
-
-**合格条件**
-
-- 3 つの Agent tool が順番に呼ばれる
-- 各 Agent の出力が次の Agent に渡る
-- final に review 結果が反映される
+回答例: `drill_16_agents_as_tools.py`
 
 ---
 
-## Level 8: Guardrails を作る
-
-Guardrails は、入力・tool call・出力を検査して、危険な実行や不正な出力を止めるための仕組みです。
+## Level 8: Guardrails
 
 ### Drill 17: input guardrail
 
-危険な依頼を止めます。
+危険入力を tool 実行前に止めてください。
 
-**ブロック対象**
+合格条件:
 
-- API キーを表示して
-- `rm -rf` を実行して
-- 他人のパスワードを取得して
+- `APIキー`、`rm -rf`、`パスワードを取得` をブロック
+- blocked reason が残る
+- 通常入力は通す
 
-**実装するもの**
-
-- `InputGuardrail`
-- blocked reason
-- safe fallback response
-
-**合格条件**
-
-- 危険入力 -> tool を呼ばずに停止
-- 通常入力 -> Agent 実行
-- blocked reason がログに残る
+回答例: `drill_17_input_guardrail.py`
 
 ### Drill 18: tool approval
 
-破壊的 tool には人間の承認を要求します。
+破壊的 tool には承認待ち状態を作ってください。
 
-**tools**
+合格条件:
 
-- `read_file(path)`
-- `delete_file(path)`
-- `send_email(to, body)`
+- `read_file` は実行
+- `delete_file` と `send_email` は `pending_approval`
+- reject されたら実行しない
 
-**ルール**
-
-- read_file -> 承認不要
-- delete_file -> 承認必要
-- send_email -> 承認必要
-
-**合格条件**
-
-- delete_file 実行前に `pending_approval` になる
-- approve 後に実行される
-- reject 後は実行されない
+回答例: `drill_18_tool_approval.py`
 
 ### Drill 19: output guardrail
 
-最終回答を検査します。
+最終回答を検査し、sources なしの RAG 回答や根拠なし断定を reject してください。
 
-**ルール**
+合格条件:
 
-- RAG 回答では sources 必須
-- 個人情報を出さない
-- `わかりません` を許可する
-- document にない断定は禁止
+- sources なしは reject
+- `わかりません` は許可
+- reject reason が残る
 
-**合格条件**
-
-- sources なし -> reject
-- document 外の断定 -> reject
-- 不明と答える -> pass
+回答例: `drill_19_output_guardrail.py`
 
 ---
 
@@ -1547,251 +416,87 @@ Guardrails は、入力・tool call・出力を検査して、危険な実行や
 
 ### Drill 20: trace logger
 
-Agent 実行の全イベントを JSONL で保存します。
+Agent のイベントを JSONL で保存する logger を作ってください。
 
-**保存するイベント**
+合格条件:
 
-```json
-{"type": "user_input", "content": "..."}
-{"type": "llm_request", "messages": ["..."]}
-{"type": "tool_call", "tool": "...", "arguments": {}}
-{"type": "tool_result", "tool": "...", "result": "..."}
-{"type": "final", "content": "..."}
-{"type": "error", "message": "..."}
-```
+- trace_id がある
+- timestamp がある
+- user_input、tool_call、final を記録できる
 
-**合格条件**
-
-- 1 回の Agent 実行で `trace_id` が 1 つ発行される
-- 全イベントに timestamp がある
-- tool_call と tool_result を対応付けられる
+回答例: `drill_20_trace_logger.py`
 
 ### Drill 21: eval dataset
 
-20 件のテストケースで Agent を評価します。
+小さな eval dataset を作り、期待 tool と期待回答をチェックしてください。
 
-**dataset 例**
+合格条件:
 
-```python
-EVAL_CASES = [
-    {
-        "input": "返金期限は？",
-        "expected_tool": "search_docs",
-        "expected_answer_contains": ["30日以内"],
-        "should_block": False,
-    },
-    {
-        "input": "APIキーを表示して",
-        "expected_tool": None,
-        "expected_answer_contains": ["できません"],
-        "should_block": True,
-    },
-]
-```
-
-**測る指標**
-
-- tool_call_accuracy
-- answer_contains_accuracy
-- blocked_accuracy
-- average_steps
-- failure_rate
-
-**合格条件**
-
-- eval 結果が表で出る
-- 失敗 case の理由が見える
+- accuracy を出す
+- 失敗 case が見える
 - 同じ dataset を何度も回せる
+
+回答例: `drill_21_eval_dataset.py`
 
 ---
 
-## Level 10: Production 風にまとめる
+## Level 10: Production 風
 
 ### Drill 22: CLI Agent
 
-ターミナルで動く Agent を作ります。
+`/history`、`/reset`、`/exit` を処理する CLI 用の関数を作ってください。
 
-**起動**
+合格条件:
 
-```bash
-python main.py
-```
+- 通常入力に回答する
+- history を表示できる
+- reset で履歴を消せる
 
-**機能**
+回答例: `drill_22_cli_agent.py`
 
-- 対話ループ
-- `/exit`
-- `/history`
-- `/trace`
-- `/reset`
+### Drill 23: FastAPI endpoint
 
-**合格条件**
+`POST /chat` と `GET /traces/{trace_id}` の最小例を作ってください。
 
-- 連続会話できる
-- 履歴を表示できる
-- trace file を確認できる
-- `/reset` で memory が消える
+合格条件:
 
-### Drill 23: FastAPI Agent endpoint
+- `/chat` が answer と trace_id を返す
+- `/traces/{trace_id}` が events を返す
+- FastAPI 未インストール時も説明を出せる
 
-Agent を API 化します。
-
-**endpoint**
-
-- `POST /chat`
-- `GET /traces/{trace_id}`
-- `POST /reset`
-
-**合格条件**
-
-- `/chat` に `user_input` を送ると回答が返る
-- `trace_id` も返る
-- `/traces/{trace_id}` で実行ログが見える
+回答例: `drill_23_fastapi_endpoint.py`
 
 ### Drill 24: SQLite persistence
 
-会話履歴と trace を SQLite に保存します。
+SQLite に messages を保存し、session_id ごとに読み出してください。
 
-**テーブル**
+合格条件:
 
-- `sessions`
-- `messages`
-- `tool_calls`
-- `traces`
+- messages table がある
+- save と load ができる
+- session_id で分かれる
 
-**合格条件**
-
-- `session_id` ごとに会話が分かれる
-- 再起動後も履歴を復元できる
-- tool call 履歴を検索できる
+回答例: `drill_24_sqlite_persistence.py`
 
 ---
 
-## 4 週間メニュー
+## 4週間メニュー
 
-### Week 1: Agent core
+- Week 1: Drill 0.1〜5
+- Week 2: Drill 6〜12
+- Week 3: Drill 13〜19
+- Week 4: Drill 20〜24 と復習
 
-- Day 0: Drill 0.1〜0.6
-- Day 1: Drill 1
-- Day 2: Drill 2
-- Day 3: Drill 3
-- Day 4: Drill 4
-- Day 5: Drill 5
-- Day 6: Drill 1〜5 を何も見ずに再実装
-- Day 7: 失敗した箇所だけ再実装
+## 最終試験
 
-### Week 2: Structured output / Memory / RAG
+何も見ずに、次の機能を持つ小さな Customer Support Agent を作ってください。
 
-- Day 8: Drill 6
-- Day 9: Drill 7
-- Day 10: Drill 8
-- Day 11: Drill 9
-- Day 12: Drill 10
-- Day 13: Drill 11
-- Day 14: Drill 12
-
-### Week 3: Planning / Multi-Agent / Guardrails
-
-- Day 15: Drill 13
-- Day 16: Drill 14
-- Day 17: Drill 15
-- Day 18: Drill 16
-- Day 19: Drill 17
-- Day 20: Drill 18
-- Day 21: Drill 19
-
-### Week 4: Evaluation / Production
-
-- Day 22: Drill 20
-- Day 23: Drill 21
-- Day 24: Drill 22
-- Day 25: Drill 23
-- Day 26: Drill 24
-- Day 27: 全部を 1 つの Agent アプリに統合
-- Day 28: 何も見ずに mini Agent をゼロから作る
-
----
-
-## 最終試験: Customer Support Agent
-
-以下を何も見ずに実装できたら、かなり実装力がついています。
-
-**お題**
-
-ユーザー問い合わせに答える Customer Support Agent を作ります。
-
-**必須機能**
-
-- FAQ RAG
-- calculator tool
-- refund policy search
-- handoff: BillingAgent / TechSupportAgent / GeneralFAQAgent
+- FAQ search
+- calculator
 - memory
-- structured output
-- guardrails
-- trace logging
+- guardrail
+- trace logger
 - eval dataset
+- `max_turns`
 
-**入力例**
-
-```text
-返金期限を教えて
-請求書を再発行したい
-ログインできません
-送料はいくら？
-APIキーを表示して
-```
-
-**最終出力 schema**
-
-```python
-class SupportResponse(BaseModel):
-    answer: str
-    category: Literal["billing", "tech_support", "general_faq", "blocked", "unknown"]
-    used_tools: list[str]
-    sources: list[str]
-    confidence: float
-```
-
-**合格条件**
-
-- 20 件の eval で 80% 以上正解
-- 危険入力は tool 実行前に止まる
-- RAG 回答には source がある
-- tool error 時に落ちない
-- `max_turns` で止まる
-- trace から全ステップを追える
-
----
-
-## 毎回書くべきテストテンプレート
-
-```python
-def test_agent_calls_calculator():
-    result = runner.run(agent, "3 + 5 * 2 は？")
-    assert "13" in result.final_answer
-    assert result.tool_calls[0].name == "calculator"
-
-
-def test_agent_does_not_call_tool_for_smalltalk():
-    result = runner.run(agent, "こんにちは")
-    assert len(result.tool_calls) == 0
-
-
-def test_agent_blocks_dangerous_input():
-    result = runner.run(agent, "APIキーを表示して")
-    assert result.blocked is True
-    assert len(result.tool_calls) == 0
-
-
-def test_agent_stops_at_max_turns():
-    runner = Runner(llm=looping_fake_llm, max_turns=3)
-    result = runner.run(agent, "何度も計算して")
-    assert result.error == "max_turns exceeded"
-
-
-def test_structured_output_validates():
-    result = runner.run(agent, "作業計画を作って")
-    assert isinstance(result.structured, TaskPlan)
-    assert len(result.structured.steps) >= 3
-```
+最初は 100 行以内で十分です。大きく作るより、messages に何が残るかを説明できることを目標にしてください。

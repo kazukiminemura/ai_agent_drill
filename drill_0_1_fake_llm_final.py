@@ -1,17 +1,13 @@
 class FakeLLM:
-    def chat(self, messages: str) -> dict:
-        if messages == "Hello":
-            return {
-                "type": "final",
-                "content": "Hello",
-            }
+    def chat(self, message: str) -> dict:
         return {
             "type": "final",
-            "content": "not found the answer",
+            "content": "こんにちは！",
         }
-    
+
+
 llm = FakeLLM()
-response = llm.chat("Hello")
+response = llm.chat("こんにちは")
 
 print(response)
 print(response["type"])
