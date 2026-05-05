@@ -47,6 +47,37 @@ user input
 - `messages`: user、assistant、tool の履歴
 - `max_turns`: 終わらない Agent を止める上限
 
+### `type` と `role` の違い
+
+この教材の前半では、`type` と `role` は別の場所で使います。
+
+`type` は `FakeLLM.chat()` が返す dict の種類です。
+
+```python
+{"type": "tool_call", "content": {...}}
+{"type": "final", "content": "..."}
+```
+
+- `tool_call`: LLM が「tool を実行してほしい」と返した
+- `final`: LLM が「これが最終回答」と返した
+
+`role` は `messages` に保存する会話履歴の発言者です。
+
+```python
+{"role": "user", "content": "..."}
+{"role": "tool", "content": {"tool_name": "calculator", "result": 2}}
+```
+
+- `user`: ユーザー入力
+- `tool`: tool を実行した結果
+- `assistant`: LLM の返答を履歴に残す場合に使う
+
+たとえば、次のコードは `type` を見ていません。`messages` の中から、`role` が `tool` の履歴だけを取り出しています。
+
+```python
+tool_results = [message for message in messages if message.get("role") == "tool"]
+```
+
 ## Drill 一覧
 
 各回答例は、学習しやすいように小さく書いてあります。高度な章でも、まずは概念が動く最小実装を優先しています。
