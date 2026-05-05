@@ -15,7 +15,7 @@ class ShortTermMemory:
 memory = ShortTermMemory(limit=4)
 memory.add("user", "1つめ")
 memory.add("assistant", "返答1")
-memory.add("tool", {"result": 13})
+memory.add("tool", {"tool_name": "calculator", "result": 13})
 memory.add("user", "2つめ")
 memory.add("assistant", "返答2")
 

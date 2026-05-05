@@ -5,12 +5,15 @@ def calculator(expression: str) -> int:
 
     raise ValueError(f"Unsupported expression: {expression}")
 
-tool_call = {
-    "tool_name": "calculator",
-    "arguments": {
-        "expression": "3 + 5 * 2"
+call = {
+    "type": "tool_call",
+    "content": {
+        "tool_name": "calculator",
+        "arguments": {
+            "expression": "3 + 5 * 2",
+        },
     },
 }
 
-result = calculator(**tool_call["arguments"])
+result = calculator(**call["content"]["arguments"])
 print(result)

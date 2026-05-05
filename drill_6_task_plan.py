@@ -18,14 +18,17 @@ class TaskPlan:
 class FakeLLM:
     def chat(self, user_input: str) -> dict:
         return {
-            "goal": user_input,
-            "steps": ["調査する", "構成を作る", "下書きを作る"],
-            "tools_needed": ["search", "writer"],
-            "risk_level": "medium",
+            "type": "final",
+            "content": {
+                "goal": user_input,
+                "steps": ["調査する", "構成を作る", "下書きを作る"],
+                "tools_needed": ["search", "writer"],
+                "risk_level": "medium",
+            },
         }
 
 
-data = FakeLLM().chat("ブログ記事を調査して、構成を作って、下書きまで作ってください")
-plan = TaskPlan(**data)
+response = FakeLLM().chat("ブログ記事を調査して、構成を作って、下書きまで作ってください")
+plan = TaskPlan(**response["content"])
 plan.validate()
 print(plan)

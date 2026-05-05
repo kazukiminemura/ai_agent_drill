@@ -7,8 +7,8 @@ EVAL_CASES = [
 
 def agent(user_input: str) -> dict:
     if "APIキー" in user_input:
-        return {"tool": None, "answer": "できません。"}
-    return {"tool": "search_docs", "answer": "返金は30日以内です。"}
+        return {"type": "final", "content": {"tool_name": None, "answer": "できません。"}}
+    return {"type": "final", "content": {"tool_name": "search_docs", "answer": "返金は30日以内です。"}}
 
 
 def evaluate(dataset: list[dict] = EVAL_CASES) -> dict:
@@ -19,10 +19,11 @@ def evaluate(dataset: list[dict] = EVAL_CASES) -> dict:
     rows = []
     for case in dataset:
         result = agent(case["input"])
-        ok = result["tool"] == case["expected_tool"] and case["expected"] in result["answer"]
+        content = result["content"]
+        ok = content["tool_name"] == case["expected_tool"] and case["expected"] in content["answer"]
         rows.append({"input": case["input"], "passed": ok})
         passed += int(ok)
-    return {"accuracy": passed / len(dataset), "rows": rows}
+    return {"type": "eval", "content": {"accuracy": passed / len(dataset), "rows": rows}}
 
 
 print(evaluate())

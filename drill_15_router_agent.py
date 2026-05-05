@@ -1,18 +1,21 @@
 def route(user_input: str) -> dict:
     if not user_input.strip():
-        return {"target_agent": "general_faq", "reason": "empty input"}
+        return {"type": "route", "content": {"target": "general_faq", "reason": "empty input"}}
     if "請求" in user_input:
-        return {"target_agent": "billing", "reason": "請求の問い合わせ"}
+        return {"type": "route", "content": {"target": "billing", "reason": "請求の問い合わせ"}}
     if "ログイン" in user_input:
-        return {"target_agent": "tech_support", "reason": "技術サポート"}
-    return {"target_agent": "general_faq", "reason": "一般的な質問"}
+        return {"type": "route", "content": {"target": "tech_support", "reason": "技術サポート"}}
+    return {"type": "route", "content": {"target": "general_faq", "reason": "一般的な質問"}}
 
 
 def handoff(user_input: str) -> dict:
     decision = route(user_input)
     return {
-        "answer": f"{decision['target_agent']} に引き継ぎます。",
-        "handoff_log": decision,
+        "type": "final",
+        "content": {
+            "answer": f"{decision['content']['target']} に引き継ぎます。",
+            "log": decision,
+        },
     }
 
 

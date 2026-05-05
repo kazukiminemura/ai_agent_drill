@@ -1,19 +1,20 @@
 def output_guardrail(answer: dict) -> dict:
-    if "answer" not in answer:
-        return {"passed": False, "reason": "answer required"}
-    if answer["answer"] == "わかりません":
-        return {"passed": True}
-    if not answer.get("sources"):
-        return {"passed": False, "reason": "sources required"}
-    if answer.get("grounded") is False:
-        return {"passed": False, "reason": "not grounded"}
-    return {"passed": True}
+    content = answer.get("content", {})
+    if "answer" not in content:
+        return {"type": "guardrail", "content": {"passed": False, "reason": "answer required"}}
+    if content["answer"] == "わかりません":
+        return {"type": "guardrail", "content": {"passed": True, "reason": ""}}
+    if not content.get("sources"):
+        return {"type": "guardrail", "content": {"passed": False, "reason": "sources required"}}
+    if content.get("grounded") is False:
+        return {"type": "guardrail", "content": {"passed": False, "reason": "not grounded"}}
+    return {"type": "guardrail", "content": {"passed": True, "reason": ""}}
 
 
 answers = [
-    {"answer": "返金は30日以内です。", "sources": ["refund.md"], "grounded": True},
-    {"answer": "根拠なしの断定です。", "sources": [], "grounded": False},
-    {"answer": "わかりません", "sources": []},
+    {"type": "final", "content": {"answer": "返金は30日以内です。", "sources": ["refund.md"], "grounded": True}},
+    {"type": "final", "content": {"answer": "根拠なしの断定です。", "sources": [], "grounded": False}},
+    {"type": "final", "content": {"answer": "わかりません", "sources": []}},
 ]
 
 for answer in answers:

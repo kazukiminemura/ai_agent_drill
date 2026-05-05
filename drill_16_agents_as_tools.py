@@ -19,8 +19,11 @@ def manager(user_input: str) -> dict:
     draft = writing_agent(research)
     final = review_agent(draft)
     return {
-        "used_tools": ["research_agent", "writing_agent", "review_agent"],
-        "final": final,
+        "type": "final",
+        "content": {
+            "used_tools": ["research_agent", "writing_agent", "review_agent"],
+            "answer": final,
+        },
     }
 
 

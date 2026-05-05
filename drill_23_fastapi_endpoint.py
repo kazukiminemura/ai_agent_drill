@@ -9,8 +9,11 @@ def agent(user_input: str) -> dict:
         raise ValueError("user_input is required")
 
     return {
-        "answer": f"echo: {user_input}",
-        "trace_id": "demo-trace",
+        "type": "final",
+        "content": {
+            "answer": f"echo: {user_input}",
+            "trace_id": "demo-trace",
+        },
     }
 
 
@@ -27,4 +30,4 @@ else:
 
     @app.get("/traces/{trace_id}")
     def trace(trace_id: str) -> dict:
-        return {"trace_id": trace_id, "events": []}
+        return {"type": "trace", "content": {"trace_id": trace_id, "events": []}}

@@ -22,8 +22,10 @@ class FakeLLM:
     def chat(self, messages: list[dict]) -> dict:
         return {
             "type": "tool_call",
-            "tool_name": "calculator",
-            "arguments": {"expression": "1 + 1"},
+            "content": {
+                "tool_name": "calculator",
+                "arguments": {"expression": "1 + 1"},
+            },
         }
 
 
@@ -42,9 +44,10 @@ def run(user_input: str, max_turns: int = 3) -> list[dict]:
 
     for _ in range(max_turns):
         response = llm.chat(messages)
-        result = calculator(**response["arguments"])
+        call = response["content"]
+        result = calculator(**call["arguments"])
         messages.append({"role": "assistant", "content": response})
-        messages.append({"role": "tool", "content": result})
+        messages.append({"role": "tool", "content": {"tool_name": call["tool_name"], "result": result}})
 
     messages.append({"role": "error", "content": "max_turns exceeded"})
     raise MaxTurnsExceededError(messages)

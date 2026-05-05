@@ -21,11 +21,13 @@ class FakeLLM:
     def chat(self, user_input: str) -> dict:
         return {
             "type": "tool_call",
-            "tool_name": "search_faq",
-            "arguments": {"query": user_input},
+            "content": {
+                "tool_name": "search_faq",
+                "arguments": {"query": user_input},
+            },
         }
 
 
 response = FakeLLM().chat("配送にはどれくらいかかる？")
-answer = search_faq(**response["arguments"])
+answer = search_faq(**response["content"]["arguments"])
 print(answer)

@@ -3,9 +3,11 @@ class FakeLLM:
         if "3 + 5 * 2" in message:
             return {
                 "type": "tool_call",
-                "tool_name": "calculator",
-                "arguments": {
-                    "expression": "3 + 5 * 2",
+                "content": {
+                    "tool_name": "calculator",
+                    "arguments": {
+                        "expression": "3 + 5 * 2",
+                    },
                 },
             }
 
@@ -18,6 +20,6 @@ llm = FakeLLM()
 response = llm.chat("what is 3 + 5 * 2?")
 
 print(response["type"])
-print(response["tool_name"])
-print(response["arguments"]["expression"])
+print(response["content"]["tool_name"])
+print(response["content"]["arguments"]["expression"])
 print(llm.chat("今日の天気は？")["content"])

@@ -16,7 +16,7 @@ def save_message(session_id: str, role: str, content: str) -> None:
     connection.commit()
 
 
-def load_messages(session_id: str) -> list[tuple[str, str]]:
+def load_messages(session_id: str) -> list[dict]:
     if not session_id:
         raise ValueError("session_id is required")
 
@@ -24,7 +24,7 @@ def load_messages(session_id: str) -> list[tuple[str, str]]:
         "select role, content from messages where session_id = ?",
         (session_id,),
     )
-    return rows.fetchall()
+    return [{"role": role, "content": content} for role, content in rows.fetchall()]
 
 
 save_message("s1", "user", "こんにちは")

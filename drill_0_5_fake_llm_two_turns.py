@@ -5,9 +5,11 @@ class FakeLLM:
         if not tool_results:
             return {
                 "type": "tool_call",
-                "tool_name": "calculator",
-                "arguments": {
-                    "expression": "3 + 5 * 2",
+                "content": {
+                    "tool_name": "calculator",
+                    "arguments": {
+                        "expression": "3 + 5 * 2",
+                    },
                 },
             }
 
@@ -25,8 +27,8 @@ class FakeLLM:
 
 llm = FakeLLM()
 
-first_response = llm.chat([])
-print(first_response)
+response = llm.chat([])
+print(response)
 
 messages = [
     {
@@ -38,5 +40,5 @@ messages = [
     }
 ]
 
-second_response = llm.chat(messages)
-print(second_response)
+response = llm.chat(messages)
+print(response)

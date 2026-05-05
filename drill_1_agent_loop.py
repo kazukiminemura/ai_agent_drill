@@ -1,29 +1,4 @@
-from dataclasses import dataclass
-from typing import Any, Callable
-
-
-@dataclass
-class Message:
-    role: str
-    content: Any
-
-
-@dataclass
-class Tool:
-    name: str
-    func: Callable[..., Any]
-
-
-@dataclass
-class Agent:
-    name: str
-    tools: list[Tool]
-
-
-@dataclass
-class RunResult:
-    final_answer: str
-    messages: list[Message]
+from typing import Callable
 
 
 def calculator(expression: str) -> int:
@@ -33,56 +8,63 @@ def calculator(expression: str) -> int:
 
 
 class FakeLLM:
-    def chat(self, messages: list[Message], agent: Agent) -> dict:
-        has_tool_result = any(message.role == "tool" for message in messages)
-        if has_tool_result:
+    def chat(self, messages: list[dict]) -> dict:
+        has_result = any(message["role"] == "tool" for message in messages)
+        if has_result:
             return {"type": "final", "content": "答えは13です。"}
         return {
             "type": "tool_call",
-            "tool_name": "calculator",
-            "arguments": {"expression": "3 + 5 * 2"},
+            "content": {
+                "tool_name": "calculator",
+                "arguments": {"expression": "3 + 5 * 2"},
+            },
         }
 
 
 class Runner:
-    def __init__(self, llm: FakeLLM):
+    def __init__(self, llm: FakeLLM, tools: dict[str, Callable]):
         self.llm = llm
+        self.tools = tools
 
-    def run(self, agent: Agent, user_input: str) -> RunResult:
-        messages = [Message("user", user_input)]
+    def run(self, user_input: str) -> dict:
+        messages = [{"role": "user", "content": user_input}]
 
         while True:
-            response = self.llm.chat(messages, agent)
+            response = self.llm.chat(messages)
 
             if response["type"] == "final":
-                messages.append(Message("assistant", response["content"]))
-                return RunResult(response["content"], messages)
+                messages.append({"role": "assistant", "content": response})
+                return {
+                    "type": "final",
+                    "content": {
+                        "answer": response["content"],
+                        "messages": messages,
+                    },
+                }
 
             if response["type"] == "tool_call":
-                messages.append(Message("assistant", response))
+                messages.append({"role": "assistant", "content": response})
+                call = response["content"]
                 try:
-                    tool = find_tool(agent, response["tool_name"])
-                    result = tool.func(**response["arguments"])
-                    messages.append(Message("tool", {"tool_name": tool.name, "result": result}))
-                except ValueError as error:
-                    messages.append(Message("tool", {"tool_name": response["tool_name"], "error": str(error)}))
-                    messages.append(Message("assistant", "ツール実行に失敗しました。"))
-                    return RunResult("ツール実行に失敗しました。", messages)
+                    tool = self.tools[call["tool_name"]]
+                    result = tool(**call["arguments"])
+                    content = {"tool_name": call["tool_name"], "result": result}
+                except (KeyError, ValueError) as error:
+                    content = {"tool_name": call["tool_name"], "error": str(error)}
+                    messages.append({"role": "tool", "content": content})
+                    answer = "ツール実行に失敗しました。"
+                    messages.append({"role": "assistant", "content": {"type": "final", "content": answer}})
+                    return {"type": "final", "content": {"answer": answer, "messages": messages}}
+
+                messages.append({"role": "tool", "content": content})
                 continue
 
             raise ValueError(f"unsupported response: {response}")
 
 
-def find_tool(agent: Agent, name: str) -> Tool:
-    for tool in agent.tools:
-        if tool.name == name:
-            return tool
-    raise ValueError(f"tool not found: {name}")
+tools = {"calculator": calculator}
+result = Runner(FakeLLM(), tools).run("3 + 5 * 2 は？")
 
-
-agent = Agent("MathAgent", [Tool("calculator", calculator)])
-result = Runner(FakeLLM()).run(agent, "3 + 5 * 2 は？")
-
-print(result.final_answer)
-for message in result.messages:
+print(result["content"]["answer"])
+for message in result["content"]["messages"]:
     print(message)

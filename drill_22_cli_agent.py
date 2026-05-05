@@ -1,23 +1,23 @@
 history: list[dict] = []
 
 
-def chat(user_input: str) -> str:
+def chat(user_input: str) -> dict:
     history.append({"role": "user", "content": user_input})
     answer = f"echo: {user_input}"
     history.append({"role": "assistant", "content": answer})
-    return answer
+    return {"type": "final", "content": {"answer": answer}}
 
 
-def handle_command(text: str) -> str:
+def handle_command(text: str) -> dict:
     if text == "/exit":
-        return "bye"
+        return {"type": "command", "content": {"answer": "bye"}}
     if text == "/history":
-        return str(history)
+        return {"type": "command", "content": {"messages": history}}
     if text == "/reset":
         history.clear()
-        return "reset"
+        return {"type": "command", "content": {"answer": "reset"}}
     if text.startswith("/"):
-        return "unknown command"
+        return {"type": "command", "content": {"answer": "unknown command"}}
     return chat(text)
 
 

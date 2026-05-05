@@ -10,13 +10,13 @@ def read_memory(key: str) -> str:
     return memory_store.get(key, "保存されていません。")
 
 
-def run(user_input: str) -> str:
+def run(user_input: str) -> dict:
     if "Pythonが好き" in user_input:
         save_memory("favorite_language", "Python")
-        return "覚えました。"
+        return {"type": "final", "content": "覚えました。"}
     if "好きな言語" in user_input:
-        return read_memory("favorite_language")
-    return "まだ対応していません。"
+        return {"type": "final", "content": read_memory("favorite_language")}
+    return {"type": "final", "content": "まだ対応していません。"}
 
 
 print(run("私はPythonが好きです"))

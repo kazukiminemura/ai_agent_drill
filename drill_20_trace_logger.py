@@ -16,7 +16,7 @@ class TraceLogger:
             "trace_id": self.trace_id,
             "timestamp": datetime.now().isoformat(),
             "type": event_type,
-            **data,
+            "content": data,
         })
 
     def jsonl(self) -> str:
@@ -24,7 +24,7 @@ class TraceLogger:
 
 
 logger = TraceLogger()
-logger.log("user_input", content="返金期限は？")
-logger.log("tool_call", tool="search_docs", arguments={"query": "返金"})
-logger.log("final", content="返金は30日以内です。")
+logger.log("user_input", text="返金期限は？")
+logger.log("tool_call", tool_name="search_docs", arguments={"query": "返金"})
+logger.log("final", answer="返金は30日以内です。")
 print(logger.jsonl())

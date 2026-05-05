@@ -11,9 +11,11 @@ class FakeLLM:
         if not tool_results:
             return {
                 "type": "tool_call",
-                "tool_name": "calculator",
-                "arguments": {
-                    "expression": "3 + 5 * 2",
+                "content": {
+                    "tool_name": "calculator",
+                    "arguments": {
+                        "expression": "3 + 5 * 2",
+                    },
                 },
             }
 
@@ -37,21 +39,22 @@ def run(user_input: str) -> str:
         }
     ]
 
-    first_response = llm.chat(messages)
+    response = llm.chat(messages)
 
-    if first_response["type"] == "tool_call":
-        if first_response["tool_name"] != "calculator":
-            raise ValueError(f"Unknown tool: {first_response['tool_name']}")
+    if response["type"] == "tool_call":
+        call = response["content"]
+        if call["tool_name"] != "calculator":
+            raise ValueError(f"Unknown tool: {call['tool_name']}")
 
         try:
-            tool_result = calculator(**first_response["arguments"])
+            result = calculator(**call["arguments"])
             content = {
-                "tool_name": first_response["tool_name"],
-                "result": tool_result,
+                "tool_name": call["tool_name"],
+                "result": result,
             }
         except ValueError as error:
             content = {
-                "tool_name": first_response["tool_name"],
+                "tool_name": call["tool_name"],
                 "error": str(error),
             }
 
@@ -59,17 +62,17 @@ def run(user_input: str) -> str:
             "role": "tool",
             "content": content,
         })
-    elif first_response["type"] == "final":
-        return first_response["content"]
+    elif response["type"] == "final":
+        return response["content"]
     else:
-        raise ValueError(f"Unsupported response: {first_response}")
+        raise ValueError(f"Unsupported response: {response}")
 
-    second_response = llm.chat(messages)
+    response = llm.chat(messages)
 
-    if second_response["type"] == "final":
-        return second_response["content"]
+    if response["type"] == "final":
+        return response["content"]
     
-    raise ValueError(f"Unsupported response: {second_response}")
+    raise ValueError(f"Unsupported response: {response}")
 
 answer = run("What is 3 + 5 * 2?")
 print(answer)

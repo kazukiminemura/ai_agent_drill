@@ -1,4 +1,4 @@
-def run(actions: list[dict], max_steps: int = 5) -> str:
+def run(actions: list[dict], max_steps: int = 5) -> dict:
     if max_steps < 1:
         raise ValueError("max_steps must be at least 1")
 
@@ -7,7 +7,7 @@ def run(actions: list[dict], max_steps: int = 5) -> str:
 
     for step, action in enumerate(actions, start=1):
         if step > max_steps:
-            return "stopped: max_steps exceeded"
+            return {"type": "stop", "content": {"reason": "max_steps exceeded"}}
 
         if action == previous:
             seen_repeats += 1
@@ -15,11 +15,11 @@ def run(actions: list[dict], max_steps: int = 5) -> str:
             seen_repeats = 1
 
         if seen_repeats >= 3:
-            return "stopped: repeated action"
+            return {"type": "stop", "content": {"reason": "repeated action"}}
 
         previous = action
 
-    return "finished"
+    return {"type": "final", "content": {"reason": "finished"}}
 
 
 same_action = {"tool": "search", "arguments": {"query": "返金"}}
