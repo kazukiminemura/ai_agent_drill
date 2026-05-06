@@ -28,6 +28,15 @@ class FakeLLM:
         }
 
 
-response = FakeLLM().chat("配送にはどれくらいかかる？")
-answer = search_faq(**response["content"]["arguments"])
-print(answer)
+def ask_faq(user_input: str) -> str:
+    response = FakeLLM().chat(user_input)
+    call = response["content"]
+    if call["tool_name"] != "search_faq":
+        raise ValueError(f"unknown tool: {call['tool_name']}")
+    return search_faq(**call["arguments"])
+
+
+print(ask_faq("返金したい"))
+print(ask_faq("配送にはどれくらいかかる？"))
+print(ask_faq("パスワードを忘れた"))
+print(ask_faq("営業時間は？"))

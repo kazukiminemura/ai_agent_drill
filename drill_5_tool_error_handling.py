@@ -1,11 +1,13 @@
+WEATHER = {
+    "Tokyo": {"city": "Tokyo", "weather": "sunny", "temp": 22},
+    "Osaka": {"city": "Osaka", "weather": "cloudy", "temp": 20},
+}
+
+
 def get_weather(city: str) -> dict:
-    data = {
-        "Tokyo": {"city": "Tokyo", "weather": "sunny", "temp": 22},
-        "Osaka": {"city": "Osaka", "weather": "cloudy", "temp": 20},
-    }
-    if city not in data:
+    if city not in WEATHER:
         raise ValueError(f"unknown city: {city}")
-    return data[city]
+    return WEATHER[city]
 
 
 def run(city: str) -> list[dict]:
@@ -20,13 +22,18 @@ def run(city: str) -> list[dict]:
     try:
         result = get_weather(**call["arguments"])
         messages.append({"role": "tool", "content": {"tool_name": call["tool_name"], "result": result}})
-        messages.append({"role": "assistant", "content": f"{city} は {result['weather']} です。"})
+        messages.append({"role": "assistant", "content": {"type": "final", "content": f"{city} は {result['weather']} です。"}})
     except ValueError as error:
         messages.append({"role": "tool", "content": {"tool_name": call["tool_name"], "error": str(error)}})
-        messages.append({"role": "assistant", "content": "天気を取得できませんでした。"})
+        messages.append({"role": "assistant", "content": {"type": "final", "content": "天気を取得できませんでした。"}})
 
     return messages
 
+
+for message in run("Tokyo"):
+    print(message)
+
+print("---")
 
 for message in run("Unknown"):
     print(message)
