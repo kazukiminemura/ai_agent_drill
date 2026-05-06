@@ -27,11 +27,15 @@ user input
   -> final なら終了
 ```
 
-この教材では、返り値の dict はできるだけ次の形に統一します。
+dict の正式な定義は [docs/message_contract.md](docs/message_contract.md) にまとめています。迷ったら README より先にこの定義を見てください。
+
+この教材では、LLM response と message dict を次の形に分けます。
 
 ```python
 {"type": "final", "content": "答えです。"}
 {"type": "tool_call", "content": {"tool_name": "calculator", "arguments": {"expression": "1 + 1"}}}
+{"role": "user", "content": "1 + 1 は？"}
+{"role": "assistant", "content": "答えは2です。"}
 {"role": "tool", "content": {"tool_name": "calculator", "result": 2}}
 {"role": "tool", "content": {"tool_name": "calculator", "error": "失敗理由"}}
 ```
@@ -49,7 +53,7 @@ user input
 
 ### `type` と `role` の違い
 
-この教材の前半では、`type` と `role` は別の場所で使います。
+この教材では、`type` と `role` は別の種類の dict で使います。ひとつの dict に `type` と `role` を同時に入れません。
 
 `type` は `FakeLLM.chat()` が返す dict の種類です。
 
@@ -61,16 +65,51 @@ user input
 - `tool_call`: LLM が「tool を実行してほしい」と返した
 - `final`: LLM が「これが最終回答」と返した
 
-`role` は `messages` に保存する会話履歴の発言者です。
+`role` は `messages` に保存する会話履歴の発言者です。message dict には `role` を入れ、`type` は入れません。
 
 ```python
 {"role": "user", "content": "..."}
+{"role": "assistant", "content": "答えです。"}
 {"role": "tool", "content": {"tool_name": "calculator", "result": 2}}
 ```
 
 - `user`: ユーザー入力
 - `tool`: tool を実行した結果
 - `assistant`: LLM の返答を履歴に残す場合に使う
+
+### dict の厳密なルール
+
+この教材では、dict を次の2種類に分けます。
+
+1. LLM response: `FakeLLM.chat()` の返り値。`type` と `content` を持つ。
+2. message: `messages` に保存する履歴。`role` と `content` を持つ。
+
+OK:
+
+```python
+response = {"type": "tool_call", "content": {"tool_name": "calculator", "arguments": {"expression": "1 + 1"}}}
+messages.append({"role": "user", "content": "1 + 1 は？"})
+messages.append({"role": "tool", "content": {"tool_name": "calculator", "result": 2}})
+messages.append({"role": "assistant", "content": "答えは2です。"})
+```
+
+NG:
+
+```python
+{"role": "assistant", "type": "final", "content": "答えです。"}
+{"role": "assistant", "content": {"type": "final", "content": "答えです。"}}
+```
+
+1つ目は、message dict に `type` が入っています。2つ目は、message の `content` に LLM response 全体を入れているため、`content["content"]` という分かりにくい形になります。
+
+tool_call を実行するときは、`response` から `call` を取り出して使います。tool_call のために assistant message を必ず保存する必要はありません。
+
+```python
+response = llm.chat(messages)
+call = response["content"]
+result = calculator(**call["arguments"])
+messages.append({"role": "tool", "content": {"tool_name": call["tool_name"], "result": result}})
+```
 
 たとえば、次のコードは `type` を見ていません。`messages` の中から、`role` が `tool` の履歴だけを取り出しています。
 
@@ -351,10 +390,10 @@ class Runner:
 
 Drill 0.8 の Runner に while ループを入れて、`final` が返るまで tool_call を処理してください。message や tool はまだクラスにせず、dict のまま扱います。
 
-assistant の返答も履歴に残す場合は、次のような message にします。
+assistant の tool_call も履歴に残す場合は、`response` 全体ではなく `response["content"]` だけを message の `content` に入れます。`type` は LLM response のキーなので、`role` を持つ message には入れません。
 
 ```python
-{"role": "assistant", "content": response}
+{"role": "assistant", "content": {"tool_name": "calculator", "arguments": {"expression": "3 + 5 * 2"}}}
 ```
 
 合格条件:
@@ -513,15 +552,14 @@ WEATHER = {
 `run(city)` は Runner の小さい版です。次の順で `messages` を作ります。
 
 1. user message: `{"role": "user", "content": f"{city} の天気は？"}`
-2. assistant の tool_call message
+2. `response` として tool_call dict を作る
 3. tool message。成功なら `result`、失敗なら `error` を入れる
-4. assistant の final message
+4. assistant message に最終回答を入れる
 
-assistant の tool_call message は次の形です。
+tool_call は `messages` に入れず、実行用の `response` として扱います。`type` は LLM response のキーなので、`role` を持つ message と同じ階層には置きません。
 
 ```python
-{
-    "role": "assistant",
+response = {
     "type": "tool_call",
     "content": {
         "tool_name": "get_weather",
@@ -530,11 +568,11 @@ assistant の tool_call message は次の形です。
 }
 ```
 
-final message は次の形です。
+final の assistant message は次の形です。
 
 ```python
-{"role": "assistant", "type": "final", "content": "Tokyo は sunny です。"}
-{"role": "assistant", "type": "final", "content": "天気を取得できませんでした。"}
+{"role": "assistant", "content": "Tokyo は sunny です。"}
+{"role": "assistant", "content": "天気を取得できませんでした。"}
 ```
 
 tool の例外は `try` / `except` で受け取ります。
@@ -551,7 +589,7 @@ except ValueError as error:
 
 - `run("Tokyo")` では tool message に `result` が入り、final が `Tokyo は sunny です。`
 - `run("Unknown")` では tool message に `error` が入り、例外が外へ出ない
-- `run("Unknown")` の最後の assistant final に `天気を取得できませんでした。` が入る
+- `run("Unknown")` の最後の assistant message に `天気を取得できませんでした。` が入る
 
 条件を満たさない場合:
 

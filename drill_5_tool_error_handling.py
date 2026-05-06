@@ -17,15 +17,14 @@ def run(city: str) -> list[dict]:
         "content": {"tool_name": "get_weather", "arguments": {"city": city}},
     }
     call = response["content"]
-    messages.append({"role": "assistant", "type": response["type"], "content": call})
 
     try:
         result = get_weather(**call["arguments"])
         messages.append({"role": "tool", "content": {"tool_name": call["tool_name"], "result": result}})
-        messages.append({"role": "assistant", "type": "final", "content": f"{city} は {result['weather']} です。"})
+        messages.append({"role": "assistant", "content": f"{city} は {result['weather']} です。"})
     except ValueError as error:
         messages.append({"role": "tool", "content": {"tool_name": call["tool_name"], "error": str(error)}})
-        messages.append({"role": "assistant", "type": "final", "content": "天気を取得できませんでした。"})
+        messages.append({"role": "assistant", "content": "天気を取得できませんでした。"})
 
     return messages
 

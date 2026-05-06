@@ -46,7 +46,7 @@ def run(user_input: str, max_turns: int = 3) -> list[dict]:
         response = llm.chat(messages)
         call = response["content"]
         result = calculator(**call["arguments"])
-        messages.append({"role": "assistant", "content": response})
+        messages.append({"role": "assistant", "content": call})
         messages.append({"role": "tool", "content": {"tool_name": call["tool_name"], "result": result}})
 
     messages.append({"role": "error", "content": "max_turns exceeded"})

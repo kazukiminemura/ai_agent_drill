@@ -37,7 +37,7 @@ class Runner:
             raise ValueError(f"unknown tool: {call['tool_name']}")
 
         result = self.tools[call["tool_name"]](**call["arguments"])
-        messages.append({"role": "assistant", "content": response})
+        messages.append({"role": "assistant", "content": call})
         messages.append({
             "role": "tool",
             "content": {

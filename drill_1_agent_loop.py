@@ -33,7 +33,7 @@ class Runner:
             response = self.llm.chat(messages)
 
             if response["type"] == "final":
-                messages.append({"role": "assistant", "content": response})
+                messages.append({"role": "assistant", "content": response["content"]})
                 return {
                     "type": "final",
                     "content": {
@@ -43,8 +43,8 @@ class Runner:
                 }
 
             if response["type"] == "tool_call":
-                messages.append({"role": "assistant", "content": response})
                 call = response["content"]
+                messages.append({"role": "assistant", "content": call})
                 try:
                     tool = self.tools[call["tool_name"]]
                     result = tool(**call["arguments"])
@@ -53,7 +53,7 @@ class Runner:
                     content = {"tool_name": call["tool_name"], "error": str(error)}
                     messages.append({"role": "tool", "content": content})
                     answer = "ツール実行に失敗しました。"
-                    messages.append({"role": "assistant", "content": {"type": "final", "content": answer}})
+                    messages.append({"role": "assistant", "content": answer})
                     return {"type": "final", "content": {"answer": answer, "messages": messages}}
 
                 messages.append({"role": "tool", "content": content})
