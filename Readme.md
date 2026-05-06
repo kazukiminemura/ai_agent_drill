@@ -522,12 +522,10 @@ assistant の tool_call message は次の形です。
 ```python
 {
     "role": "assistant",
+    "type": "tool_call",
     "content": {
-        "type": "tool_call",
-        "content": {
-            "tool_name": "get_weather",
-            "arguments": {"city": city},
-        },
+        "tool_name": "get_weather",
+        "arguments": {"city": city},
     },
 }
 ```
@@ -535,8 +533,8 @@ assistant の tool_call message は次の形です。
 final message は次の形です。
 
 ```python
-{"role": "assistant", "content": {"type": "final", "content": "Tokyo は sunny です。"}}
-{"role": "assistant", "content": {"type": "final", "content": "天気を取得できませんでした。"}}
+{"role": "assistant", "type": "final", "content": "Tokyo は sunny です。"}
+{"role": "assistant", "type": "final", "content": "天気を取得できませんでした。"}
 ```
 
 tool の例外は `try` / `except` で受け取ります。
