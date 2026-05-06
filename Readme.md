@@ -96,8 +96,8 @@ messages.append({"role": "assistant", "content": "答えは2です。"})
 NG:
 
 ```python
-{"role": "assistant", "type": "final", "content": "答えです。"}
-{"role": "assistant", "content": {"type": "final", "content": "答えです。"}}
+message = {"role": "assistant", "type": "final", "content": "答えです。"}
+message = {"role": "assistant", "content": {"type": "final", "content": "答えです。"}}
 ```
 
 1つ目は、message dict に `type` が入っています。2つ目は、message の `content` に LLM response 全体を入れているため、`content["content"]` という分かりにくい形になります。
