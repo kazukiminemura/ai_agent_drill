@@ -614,6 +614,7 @@ except ValueError as error:
 
 ユーザー依頼から `goal`、`steps`、`tools_needed`、`risk_level` を持つ TaskPlan を作ってください。
 このドリルでは本物の LLM 呼び出しは使わず、`FakeLLM.chat()` が固定の structured output を返す最小実装で大丈夫です。
+`FakeLLM.chat()` の返り値は、[docs/message_contract.md](docs/message_contract.md) の LLM response に従い、必ず `type` と `content` を持つ dict にします。
 
 `TaskPlan` は `dataclass` で作ると、dict から作りやすくなります。
 
@@ -667,10 +668,11 @@ print(plan)
 
 ### Drill 7: 壊れた JSON を repair する
 
-作るもの: `FakeLLM.repair(broken_json: str) -> str`, `parse_or_repair(text: str, retry: int = 2) -> dict`
+作るもの: `FakeLLM.repair(broken_json: str) -> dict`, `parse_or_repair(text: str, retry: int = 2) -> dict`
 
 壊れた JSON を parse し、失敗したら FakeLLM に repair させて再試行してください。
-このドリルでも本物の LLM 呼び出しは使わず、`FakeLLM.repair()` が修正済み JSON 文字列を固定で返す実装で大丈夫です。
+このドリルでも本物の LLM 呼び出しは使わず、`FakeLLM.repair()` が修正済み JSON 文字列を `content` に入れた LLM response を固定で返す実装で大丈夫です。
+`FakeLLM.repair()` の返り値も、[docs/message_contract.md](docs/message_contract.md) に従い、必ず `type` と `content` を持つ dict にします。
 
 JSON parse は `json.loads(text)` で行います。失敗すると `json.JSONDecodeError` が出るので、`except` で受け取り、エラー文を list に保存します。
 
@@ -683,18 +685,22 @@ except json.JSONDecodeError as error:
     errors.append(str(error))
 ```
 
-`FakeLLM.repair()` は、たとえば次のような valid JSON 文字列を返してください。
+`FakeLLM.repair()` は、たとえば次のような LLM response を返してください。
 
 ```python
 class FakeLLM:
-    def repair(self, broken_json: str) -> str:
-        return '{"goal": "調査する", "steps": ["検索", "要約"]}'
+    def repair(self, broken_json: str) -> dict:
+        return {
+            "type": "final",
+            "content": '{"goal": "調査する", "steps": ["検索", "要約"]}',
+        }
 ```
 
 `parse_or_repair()` では `FakeLLM()` を作り、最初の parse も含めて最大 `retry + 1` 回試してください。
-parse に失敗したら `errors` にエラー文を追加し、`text = llm.repair(text)` で次の試行に進みます。
+parse に失敗したら `errors` にエラー文を追加し、`response = llm.repair(text)` で LLM response を受け取り、`text = response["content"]` で次の試行に進みます。
 
-動作確認には、次のような壊れた JSON を使ってください。
+動作確認には、次のような壊れた JSON 文字列を使ってください。
+これは Python の文字列としては正しいですが、JSON としてはキーに `"` がなく、末尾カンマもあるので `json.loads()` に失敗します。
 
 ```python
 broken = '{ goal: "調査する", steps: ["検索", "要約",], }'

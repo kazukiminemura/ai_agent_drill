@@ -2,8 +2,11 @@ import json
 
 
 class FakeLLM:
-    def repair(self, broken_json: str) -> str:
-        return '{"goal": "調査する", "steps": ["検索", "要約"]}'
+    def repair(self, broken_json: str) -> dict:
+        return {
+            "type": "final",
+            "content": '{"goal": "調査する", "steps": ["検索", "要約"]}',
+        }
 
 
 def parse_or_repair(text: str, retry: int = 2) -> dict:
@@ -15,7 +18,8 @@ def parse_or_repair(text: str, retry: int = 2) -> dict:
             return json.loads(text)
         except json.JSONDecodeError as error:
             errors.append(str(error))
-            text = llm.repair(text)
+            response = llm.repair(text)
+            text = response["content"]
 
     raise ValueError({"message": "json repair failed", "errors": errors})
 
