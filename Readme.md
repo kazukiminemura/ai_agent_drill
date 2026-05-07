@@ -613,6 +613,7 @@ except ValueError as error:
 作るもの: `TaskPlan.validate() -> None`, `FakeLLM.chat(user_input: str) -> dict`
 
 ユーザー依頼から `goal`、`steps`、`tools_needed`、`risk_level` を持つ TaskPlan を作ってください。
+このドリルでは本物の LLM 呼び出しは使わず、`FakeLLM.chat()` が固定の structured output を返す最小実装で大丈夫です。
 
 `TaskPlan` は `dataclass` で作ると、dict から作りやすくなります。
 
@@ -628,6 +629,29 @@ class TaskPlan:
 ```
 
 `TaskPlan(**response["content"])` のように、dict をまとめて渡せます。
+
+`FakeLLM.chat()` は、次の形の dict を返してください。
+
+```python
+{
+    "type": "final",
+    "content": {
+        "goal": user_input,
+        "steps": ["調査する", "構成を作る", "下書きを作る"],
+        "tools_needed": ["search", "writer"],
+        "risk_level": "medium",
+    },
+}
+```
+
+最後に、次のように `TaskPlan` に変換して validate してください。
+
+```python
+response = FakeLLM().chat("ブログ記事を調査して、構成を作って、下書きまで作ってください")
+plan = TaskPlan(**response["content"])
+plan.validate()
+print(plan)
+```
 
 合格条件:
 
@@ -646,6 +670,7 @@ class TaskPlan:
 作るもの: `FakeLLM.repair(broken_json: str) -> str`, `parse_or_repair(text: str, retry: int = 2) -> dict`
 
 壊れた JSON を parse し、失敗したら FakeLLM に repair させて再試行してください。
+このドリルでも本物の LLM 呼び出しは使わず、`FakeLLM.repair()` が修正済み JSON 文字列を固定で返す実装で大丈夫です。
 
 JSON parse は `json.loads(text)` で行います。失敗すると `json.JSONDecodeError` が出るので、`except` で受け取り、エラー文を list に保存します。
 
@@ -656,6 +681,24 @@ try:
     data = json.loads(text)
 except json.JSONDecodeError as error:
     errors.append(str(error))
+```
+
+`FakeLLM.repair()` は、たとえば次のような valid JSON 文字列を返してください。
+
+```python
+class FakeLLM:
+    def repair(self, broken_json: str) -> str:
+        return '{"goal": "調査する", "steps": ["検索", "要約"]}'
+```
+
+`parse_or_repair()` では `FakeLLM()` を作り、最初の parse も含めて最大 `retry + 1` 回試してください。
+parse に失敗したら `errors` にエラー文を追加し、`text = llm.repair(text)` で次の試行に進みます。
+
+動作確認には、次のような壊れた JSON を使ってください。
+
+```python
+broken = '{ goal: "調査する", steps: ["検索", "要約",], }'
+print(parse_or_repair(broken))
 ```
 
 合格条件:
