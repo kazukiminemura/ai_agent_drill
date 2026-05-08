@@ -8,9 +8,10 @@ class SummaryMemory:
 
     def add(self, role: str, content: str) -> None:
         self.messages.append({"role": role, "content": content})
-        if len(self.messages) > 10:
+        if len(self.messages) > 10 or (self.summary and len(self.messages) > self.keep_recent):
             old = self.messages[:-self.keep_recent]
-            self.summary = " / ".join(message["content"] for message in old)
+            old_summary = " / ".join(message["content"] for message in old)
+            self.summary = f"{self.summary} / {old_summary}" if self.summary else old_summary
             self.messages = self.messages[-self.keep_recent :]
 
     def prompt_messages(self) -> list[dict]:

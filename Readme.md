@@ -734,11 +734,55 @@ print(parse_or_repair(broken))
 作るもの: `ShortTermMemory.add(role: str, content) -> None`, `ShortTermMemory.recent() -> list[dict]`
 
 messages を保存し、直近 N 件だけ取り出す Memory を作ってください。
+この Drill では、`add()` のたびに古い message を削除しなくても大丈夫です。
+`self.messages` には追加された message を保存しておき、`recent()` が呼ばれたときだけ最新 `limit` 件を返してください。
+
+この Drill では、Memory は内部に `self.messages` という list を持ちます。
+`add()` が呼ばれるたびに、次の形の dict を list に追加してください。
+
+```python
+{"role": role, "content": content}
+```
+
+`role` は `"user"` / `"assistant"` / `"tool"` などの文字列です。
+`content` は文字列だけでなく、tool result のような dict も受け取れるようにします。
 
 直近 N 件は list の slice で取り出せます。
 
 ```python
 self.messages[-self.limit:]
+```
+
+実装の流れ:
+
+1. `__init__` で `limit` を受け取り、`self.messages = []` を作る
+2. `limit < 1` なら `ValueError` を出す
+3. `add()` で `{"role": role, "content": content}` を `self.messages` に追加する
+4. `recent()` で `self.messages[-self.limit:]` を返す
+
+動作確認例:
+
+```python
+memory = ShortTermMemory(limit=4)
+memory.add("user", "1つめ")
+memory.add("assistant", "返答1")
+memory.add("tool", {"tool_name": "calculator", "result": 13})
+memory.add("user", "2つめ")
+memory.add("assistant", "返答2")
+
+print(memory.recent())
+# 先頭の user message は落ち、最新4件だけが返る
+```
+
+期待される戻り値は次の形です。
+
+```python
+[
+    {"role": "assistant", "content": "返答1"},
+    {"role": "tool", "content": {"tool_name": "calculator", "result": 13}},
+    {"role": "user", "content": "2つめ"},
+    {"role": "assistant", "content": "返答2"},
+]
 ```
 
 合格条件:
@@ -761,16 +805,41 @@ messages が増えたら古いものを summary にまとめ、prompt には sum
 
 この Drill の summary は、本物の要約でなくて大丈夫です。古い message の `content` を `" / "` などでつなげた短い文字列として扱います。
 
+この Drill では、最初は `messages` をそのまま貯めます。
+ただし、`messages` が 10 件を超えたら、古い messages を `summary` に移し、`messages` 側には最新 `keep_recent` 件だけを残してください。
+
+たとえば `keep_recent=4` で 12 件追加した場合は、`summary` に古い 8 件分の `content` が入り、`messages` には最新 4 件だけが残ります。
+
 prompt に入れる summary は、system message として保存します。
 
 ```python
 {"role": "system", "content": "summary: ..."}
 ```
 
+実装の流れ:
+
+1. `__init__` で `keep_recent`, `summary`, `messages` を用意する
+2. `keep_recent < 1` なら `ValueError` を出す
+3. `add()` で `{"role": role, "content": content}` を `messages` に追加する
+4. 10件を超えたら、`messages[:-keep_recent]` を古い messages として取り出す
+5. 古い messages の `content` を `" / "` でつなぎ、`summary` に保存または追記する
+6. `messages` は `messages[-keep_recent:]` に入れ替える
+7. すでに `summary` がある状態でさらに message が増えたら、`messages` が `keep_recent` 件だけになるように古い分を追加で `summary` に移す
+
+`prompt_messages()` は、summary がまだ空なら `messages` をそのまま返します。
+summary があるなら、先頭に system message を付けて返します。
+
+```python
+def prompt_messages(self) -> list[dict]:
+    if not self.summary:
+        return self.messages
+    return [{"role": "system", "content": f"summary: {self.summary}"}] + self.messages
+```
+
 合格条件:
 
 - 10件を超えたら summary ができる
-- prompt が summary + recent になる
+- prompt が summary + 最新 `keep_recent` 件になる
 
 条件を満たさない場合:
 
