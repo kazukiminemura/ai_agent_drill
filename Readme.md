@@ -917,6 +917,28 @@ results = search_docs("返金期限は？")
 # [("refund.md", "返金期限は購入から30日以内です。")]
 ```
 
+実装ヒント:
+
+1. まず `DOCS` と `KEYWORDS` を上の例の形で用意します。
+2. `score()` は `KEYWORDS[file]` を取り出し、query に含まれる keyword の数を数えます。
+3. `search_docs()` は `DOCS.items()` を score の大きい順に並べ替えます。
+4. 並べ替えたあと、score が 0 の document は返さないようにします。
+5. `answer()` は `search_docs(query)` を呼び、見つかったら先頭の `(file, text)` を使います。
+
+`answer()` の返り値は次の形にすると、後続の Drill と揃います。
+
+```python
+{
+    "type": "final",
+    "content": {
+        "answer": "返金期限は購入から30日以内です。",
+        "source": "refund.md",
+    },
+}
+```
+
+見つからなかった場合は、同じ形のまま `source` を `None` にします。
+
 合格条件:
 
 - `返金期限は？` で `refund.md`
@@ -947,12 +969,31 @@ DOCS = {
 
 ```python
 {
-    "answer": "返金期限は30日以内です。",
-    "sources": [{"file": "refund.md", "quote": "返金期限は購入から30日以内です。"}],
+    "type": "final",
+    "content": {
+        "answer": "返金は購入から30日以内に申請できます。",
+        "sources": [{"file": "refund.md", "quote": "購入から30日以内"}],
+    },
 }
 ```
 
 quote の確認は、`quote in document_text` でできます。
+
+実装ヒント:
+
+1. `answer_with_source()` では、まず query に `"返金"` が含まれているかを見ます。
+2. 返金の質問なら `refund.md` の本文を根拠にして `answer` と `sources` を作ります。
+3. `quote` は document の一部をそのまま入れます。たとえば `"購入から30日以内"` は `refund.md` の本文に含まれています。
+4. response を作ったら、返す前に `validate_sources(response)` を呼びます。
+5. `validate_sources()` は `response["content"]["sources"]` を1件ずつ見て、`DOCS[file]` の中に `quote` があるか確認します。
+
+`validate_sources()` の中では、次の3つを取り出せれば十分です。
+
+```python
+file = source["file"]
+quote = source["quote"]
+document_text = DOCS[file]
+```
 
 合格条件:
 
