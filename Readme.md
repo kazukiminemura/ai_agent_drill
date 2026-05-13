@@ -1757,7 +1757,11 @@ line = json.dumps(event, ensure_ascii=False)
 
 作るもの: `agent(user_input: str) -> dict`, `evaluate(dataset: list[dict]) -> dict`
 
-出力で確認すること: `content["accuracy"]` と `content["rows"]` を見て、どの case が成功・失敗したかを確認できるかを見ます。
+この Drill では、Agent の答えを1件ずつ手で確認する代わりに、テスト用の dataset をまとめて流して「何件中何件が期待どおりだったか」を集計します。
+
+`accuracy` は正解率です。たとえば dataset が4件あり、そのうち3件が `passed=True` なら `accuracy` は `0.75` になります。
+
+出力で確認すること: `content["accuracy"]` で全体の正解率を見て、`content["rows"]` でどの case が成功・失敗したかを確認できるかを見ます。
 
 回答の形:
 
@@ -1782,6 +1786,8 @@ dataset = [
 ```
 
 各 case を `agent(case["input"])` に渡し、`result["content"]["tool_name"]` が `expected_tool` と一致し、`expected_answer` が `result["content"]["answer"]` に含まれていたら `passed=True` にします。
+
+最後に、`passed=True` だった件数を dataset 全体の件数で割った値を `accuracy` として返してください。
 
 `agent(user_input)` の返り値は次の形にします。
 
