@@ -42,9 +42,18 @@ assert response["content"] == "こんにちは！"
 print(response["content"])
 ```
 
-`合格条件` は、そのまま `assert` にすると確認しやすくなります。
-`出力で確認すること` は、どの値を `print()` したり `assert` したりすればよいかを示しています。
-回答例ファイルを見るときも、まず「どの関数が作られているか」「どの返り値を確認しているか」を見てください。
+### 問題文から回答例を作る手順
+
+各 Drill の問題文は、回答例を作るための材料を上から順に並べています。
+最初は次の順番で読み、Python ファイルに写すように組み立ててください。
+
+1. `作るもの` を見て、必要な関数・クラスの外枠を作る
+2. `回答の形` を見て、最後にどの呼び出し方で確認するかを先に書く
+3. `実装の流れ` を見て、関数・メソッドの中身を順番に埋める
+4. `合格条件` を `assert` にして、返り値の形を確認する
+5. `条件を満たさない場合` があれば、失敗時や例外時の分岐も足す
+
+回答例は、「問題文を要約した説明」ではなく、「問題文に書かれた contract を満たす最小の実装」です。
 
 ## 基本の流れ
 
@@ -443,18 +452,44 @@ answer = run("3 + 5 * 2 は？")
 assert answer == "答えは13です。"
 ```
 
-`run(user_input: str) -> str` を作り、user message、tool_call、tool result、final までを1つの関数で動かしてください。
+Drill 0.6 は、ここまで作った部品を初めて1本につなぐ問題です。
+0.5 までは `FakeLLM` や tool result message を個別に確認していましたが、ここでは `run()` が Agent の小さい実行係になります。
 
-`run` の中では、次の順番で処理します。
+`run(user_input: str) -> str` を作り、user message、LLM response、tool result message、final response までを1つの関数で動かしてください。
+`messages` に入れる dict は `role` を持つ message、`FakeLLM.chat()` から返る dict は `type` を持つ response として扱います。
 
 実装の流れ:
 
-1. `messages` に user message を入れる
-2. `FakeLLM.chat(messages)` を呼ぶ
-3. `tool_call` なら tool を実行する
-4. tool result を `messages` に追加する
-5. もう一度 `FakeLLM.chat(messages)` を呼ぶ
-6. `final` の `content` を返す
+1. `calculator(expression: str) -> int` を作る
+   - `expression == "3 + 5 * 2"` なら `13` を返す
+   - それ以外は `ValueError` を出す
+2. `FakeLLM.chat(messages)` を作る
+   - `messages` の中から `role == "tool"` の message を探す
+   - tool message がまだなければ、`{"type": "tool_call", "content": ...}` を返す
+   - tool message に `error` があれば、失敗用の `final` response を返す
+   - tool message に `result` があれば、`答えは13です。` の `final` response を返す
+3. `run(user_input: str) -> str` を作る
+   - `llm = FakeLLM()` を作る
+   - `messages = [{"role": "user", "content": user_input}]` を作る
+   - `response = llm.chat(messages)` で1回目の response を受け取る
+   - `response["type"] == "final"` なら `response["content"]` を返す
+   - `response["type"] != "tool_call"` なら `ValueError` を出す
+   - `tool_call = response["content"]` として tool 実行依頼を取り出す
+   - `tool_call["tool_name"] != "calculator"` なら `ValueError` を出す
+   - `calculator(**tool_call["arguments"])` を実行する
+   - 成功したら `{"tool_name": "calculator", "result": result}` を作る
+   - 失敗したら `{"tool_name": "calculator", "error": str(error)}` を作る
+   - `{"role": "tool", "content": tool_message_content}` を `messages` に追加する
+   - `response = llm.chat(messages)` でもう一度 response を受け取る
+   - 最後の `response["type"]` が `final` でなければ `ValueError` を出す
+   - `response["content"]` を返す
+
+変数名は、dict の役割が分かる名前にしてください。
+
+- `messages`: `role` を持つ message の list
+- `response`: `type` を持つ LLM response
+- `tool_call`: `response["content"]` から取り出した tool 実行依頼
+- `tool_message_content`: `role="tool"` の message に入れる `content`
 
 合格条件:
 

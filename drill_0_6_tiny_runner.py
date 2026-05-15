@@ -6,8 +6,11 @@ def calculator(expression: str) -> int:
 
 class FakeLLM:
     def chat(self, messages: list[dict]) -> dict:
-        result = next((message["content"] for message in messages if message["role"] == "tool"), None)
-        if result is None:
+        tool_message_content = next(
+            (message["content"] for message in messages if message["role"] == "tool"),
+            None,
+        )
+        if tool_message_content is None:
             return {
                 "type": "tool_call",
                 "content": {
@@ -16,10 +19,10 @@ class FakeLLM:
                 },
             }
 
-        if "error" in result:
+        if "error" in tool_message_content:
             return {"type": "final", "content": "計算できませんでした。"}
 
-        return {"type": "final", "content": f"答えは{result['result']}です。"}
+        return {"type": "final", "content": f"答えは{tool_message_content['result']}です。"}
 
 
 def run(user_input: str) -> str:
@@ -32,17 +35,17 @@ def run(user_input: str) -> str:
     if response["type"] != "tool_call":
         raise ValueError(f"Unsupported response: {response}")
 
-    call = response["content"]
-    if call["tool_name"] != "calculator":
-        raise ValueError(f"Unknown tool: {call['tool_name']}")
+    tool_call = response["content"]
+    if tool_call["tool_name"] != "calculator":
+        raise ValueError(f"Unknown tool: {tool_call['tool_name']}")
 
-    content = {"tool_name": call["tool_name"]}
+    tool_message_content = {"tool_name": tool_call["tool_name"]}
     try:
-        content["result"] = calculator(**call["arguments"])
+        tool_message_content["result"] = calculator(**tool_call["arguments"])
     except ValueError as error:
-        content["error"] = str(error)
+        tool_message_content["error"] = str(error)
 
-    messages.append({"role": "tool", "content": content})
+    messages.append({"role": "tool", "content": tool_message_content})
     response = llm.chat(messages)
 
     if response["type"] != "final":
