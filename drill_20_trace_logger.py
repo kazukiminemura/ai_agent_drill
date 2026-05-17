@@ -8,14 +8,14 @@ class TraceLogger:
         self.trace_id = str(uuid4())
         self.events: list[dict] = []
 
-    def log(self, event_type: str, **data) -> None:
-        if not event_type:
-            raise ValueError("event_type is required")
+    def log(self, event_status: str, **data) -> None:
+        if not event_status:
+            raise ValueError("event_status is required")
 
         self.events.append({
             "trace_id": self.trace_id,
             "timestamp": datetime.now().isoformat(),
-            "type": event_type,
+            "status": event_status,
             "content": data,
         })
 

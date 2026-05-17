@@ -13,7 +13,7 @@ def get_weather(city: str) -> dict:
 def run(city: str) -> list[dict]:
     messages = [{"role": "user", "content": f"{city} の天気は？"}]
     response = {
-        "type": "tool_call",
+        "status": "tool_call",
         "content": {"tool_name": "get_weather", "arguments": {"city": city}},
     }
     call = response["content"]

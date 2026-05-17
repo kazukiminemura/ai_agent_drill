@@ -40,17 +40,17 @@ class FakeLLM:
     def chat(self, user_input: str) -> dict:
         if "12 * 8" in user_input:
             return {
-                "type": "tool_call",
+                "status": "tool_call",
                 "content": {
                     "tool_name": "calculator",
                     "arguments": {"expression": "12 * 8"},
                 },
             }
-        return {"type": "final", "content": "calculator は使いません。"}
+        return {"status": "final", "content": "calculator は使いません。"}
 
 
 response = FakeLLM().chat("12 * 8 は？")
-if response["type"] == "tool_call":
+if response["status"] == "tool_call":
     print(calculator(**response["content"]["arguments"]))
 else:
     print(response["content"])

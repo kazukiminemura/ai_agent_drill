@@ -6,7 +6,7 @@ def calculator(expression: str) -> int:
     raise ValueError(f"Unsupported expression: {expression}")
 
 call = {
-    "type": "tool_call",
+    "status": "tool_call",
     "content": {
         "tool_name": "calculator",
         "arguments": {

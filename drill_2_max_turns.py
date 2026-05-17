@@ -21,7 +21,7 @@ class MaxTurnsExceededError(ValueError):
 class FakeLLM:
     def chat(self, messages: list[dict]) -> dict:
         return {
-            "type": "tool_call",
+            "status": "tool_call",
             "content": {
                 "tool_name": "calculator",
                 "arguments": {"expression": "1 + 1"},

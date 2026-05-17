@@ -4,7 +4,7 @@ import json
 class FakeLLM:
     def repair(self, broken_json: str) -> dict:
         return {
-            "type": "final",
+            "status": "final",
             "content": '{"goal": "調査する", "steps": ["検索", "要約"]}',
         }
 

@@ -18,7 +18,7 @@ class TaskPlan:
 class FakeLLM:
     def chat(self, user_input: str) -> dict:
         return {
-            "type": "final",
+            "status": "final",
             "content": {
                 "goal": user_input,
                 "steps": ["調査する", "構成を作る", "下書きを作る"],

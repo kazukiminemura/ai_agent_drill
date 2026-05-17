@@ -12,7 +12,7 @@ class FakeLLM:
         )
         if tool_message_content is None:
             return {
-                "type": "tool_call",
+                "status": "tool_call",
                 "content": {
                     "tool_name": "calculator",
                     "arguments": {"expression": "3 + 5 * 2"},
@@ -20,9 +20,9 @@ class FakeLLM:
             }
 
         if "error" in tool_message_content:
-            return {"type": "final", "content": "計算できませんでした。"}
+            return {"status": "final", "content": "計算できませんでした。"}
 
-        return {"type": "final", "content": f"答えは{tool_message_content['result']}です。"}
+        return {"status": "final", "content": f"答えは{tool_message_content['result']}です。"}
 
 
 def run(user_input: str) -> str:
@@ -30,9 +30,9 @@ def run(user_input: str) -> str:
     messages = [{"role": "user", "content": user_input}]
     response = llm.chat(messages)
 
-    if response["type"] == "final":
+    if response["status"] == "final":
         return response["content"]
-    if response["type"] != "tool_call":
+    if response["status"] != "tool_call":
         raise ValueError(f"Unsupported response: {response}")
 
     tool_call = response["content"]
@@ -48,7 +48,7 @@ def run(user_input: str) -> str:
     messages.append({"role": "tool", "content": tool_message_content})
     response = llm.chat(messages)
 
-    if response["type"] != "final":
+    if response["status"] != "final":
         raise ValueError(f"Unsupported response: {response}")
     return response["content"]
 

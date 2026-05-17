@@ -5,23 +5,23 @@ KNOWN_TOOLS = {"read_file", "delete_file", "send_email"}
 def request_tool(tool_name: str, arguments: dict) -> dict:
     if tool_name not in KNOWN_TOOLS:
         return {
-            "type": "rejected",
+            "status": "rejected",
             "content": {"reason": f"unknown tool: {tool_name}"},
         }
 
     if tool_name in APPROVAL_REQUIRED:
         return {
-            "type": "pending_approval",
+            "status": "pending_approval",
             "content": {"tool_name": tool_name, "arguments": arguments},
         }
-    return {"type": "tool_result", "content": {"tool_name": tool_name, "result": f"{tool_name} done"}}
+    return {"status": "tool_result", "content": {"tool_name": tool_name, "result": f"{tool_name} done"}}
 
 
 def approve(pending: dict, allowed: bool) -> dict:
     if not allowed:
-        return {"type": "rejected", "content": {"reason": "not approved"}}
+        return {"status": "rejected", "content": {"reason": "not approved"}}
     tool_name = pending["content"]["tool_name"]
-    return {"type": "tool_result", "content": {"tool_name": tool_name, "result": f"{tool_name} done"}}
+    return {"status": "tool_result", "content": {"tool_name": tool_name, "result": f"{tool_name} done"}}
 
 
 pending = request_tool("delete_file", {"path": "old.txt"})

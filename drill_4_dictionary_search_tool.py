@@ -20,7 +20,7 @@ def search_faq(query: str) -> str:
 class FakeLLM:
     def chat(self, user_input: str) -> dict:
         return {
-            "type": "tool_call",
+            "status": "tool_call",
             "content": {
                 "tool_name": "search_faq",
                 "arguments": {"query": user_input},

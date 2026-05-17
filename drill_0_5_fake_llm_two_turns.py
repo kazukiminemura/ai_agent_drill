@@ -4,7 +4,7 @@ class FakeLLM:
 
         if not tool_results:
             return {
-                "type": "tool_call",
+                "status": "tool_call",
                 "content": {
                     "tool_name": "calculator",
                     "arguments": {
@@ -15,12 +15,12 @@ class FakeLLM:
 
         if "error" in tool_results[-1]["content"]:
             return {
-                "type": "final",
+                "status": "final",
                 "content": "計算できませんでした。",
             }
 
         return {
-            "type": "final",
+            "status": "final",
             "content": "答えは13です。",
         }
 

@@ -11,9 +11,9 @@ class FakeLLM:
     def chat(self, messages: list[dict]) -> dict:
         has_result = any(message["role"] == "tool" for message in messages)
         if has_result:
-            return {"type": "final", "content": "答えは13です。"}
+            return {"status": "final", "content": "答えは13です。"}
         return {
-            "type": "tool_call",
+            "status": "tool_call",
             "content": {
                 "tool_name": "calculator",
                 "arguments": {"expression": "3 + 5 * 2"},
@@ -32,17 +32,17 @@ class Runner:
         while True:
             llm_response = self.llm.chat(messages)
 
-            if llm_response["type"] == "final":
+            if llm_response["status"] == "final":
                 messages.append({"role": "assistant", "content": llm_response["content"]})
                 return {
-                    "type": "final",
+                    "status": "final",
                     "content": {
                         "answer": llm_response["content"],
                         "messages": messages,
                     },
                 }
 
-            if llm_response["type"] == "tool_call":
+            if llm_response["status"] == "tool_call":
                 call = llm_response["content"]
                 messages.append({"role": "assistant", "content": call})
                 try:
@@ -54,7 +54,7 @@ class Runner:
                     messages.append({"role": "tool", "content": content})
                     answer = "ツール実行に失敗しました。"
                     messages.append({"role": "assistant", "content": answer})
-                    return {"type": "final", "content": {"answer": answer, "messages": messages}}
+                    return {"status": "final", "content": {"answer": answer, "messages": messages}}
 
                 messages.append({"role": "tool", "content": content})
                 continue

@@ -8,9 +8,9 @@ class FakeLLM:
     def chat(self, messages: list[dict]) -> dict:
         has_result = any(message["role"] == "tool" for message in messages)
         if has_result:
-            return {"type": "final", "content": "答えは13です。"}
+            return {"status": "final", "content": "答えは13です。"}
         return {
-            "type": "tool_call",
+            "status": "tool_call",
             "content": {
                 "tool_name": "calculator",
                 "arguments": {"expression": "3 + 5 * 2"},
@@ -27,12 +27,12 @@ class Runner:
         messages = [{"role": "user", "content": user_input}]
 
         llm_response = self.llm.chat(messages)
-        if llm_response["type"] == "final":
+        if llm_response["status"] == "final":
             return {
-                "type": "final",
+                "status": "final",
                 "content": {"answer": llm_response["content"], "messages": messages},
             }
-        if llm_response["type"] != "tool_call":
+        if llm_response["status"] != "tool_call":
             raise ValueError(f"unsupported response: {llm_response}")
 
         call = llm_response["content"]
@@ -51,7 +51,7 @@ class Runner:
 
         llm_response = self.llm.chat(messages)
         return {
-            "type": "final",
+            "status": "final",
             "content": {"answer": llm_response["content"], "messages": messages},
         }
 

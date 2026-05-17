@@ -8,7 +8,7 @@ def answer_with_source(query: str) -> dict:
     for file, text in DOCS.items():
         if "返金" in query and "返金" in text:
             response = {
-                "type": "final",
+                "status": "final",
                 "content": {
                 "answer": "返金は購入から30日以内に申請できます。",
                 "sources": [{"file": file, "quote": "購入から30日以内"}],
@@ -16,7 +16,7 @@ def answer_with_source(query: str) -> dict:
             }
             validate_sources(response)
             return response
-    return {"type": "final", "content": {"answer": "不明です。", "sources": []}}
+    return {"status": "final", "content": {"answer": "不明です。", "sources": []}}
 
 
 def validate_sources(response: dict) -> None:

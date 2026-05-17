@@ -31,9 +31,9 @@ def search_docs(query: str, top_k: int = 1) -> list[tuple[str, str]]:
 def answer(query: str) -> dict:
     results = search_docs(query)
     if not results:
-        return {"type": "final", "content": {"answer": "見つかりませんでした。", "source": None}}
+        return {"status": "final", "content": {"answer": "見つかりませんでした。", "source": None}}
     file, text = results[0]
-    return {"type": "final", "content": {"answer": text, "source": file}}
+    return {"status": "final", "content": {"answer": text, "source": file}}
 
 
 print(answer("返金期限は？"))

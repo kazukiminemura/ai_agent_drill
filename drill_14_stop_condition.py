@@ -7,7 +7,7 @@ def run(actions: list[dict], max_steps: int = 5) -> dict:
 
     for step, action in enumerate(actions, start=1):
         if step > max_steps:
-            return {"type": "stop", "content": {"reason": "max_steps exceeded"}}
+            return {"status": "stop", "content": {"reason": "max_steps exceeded"}}
 
         if action == previous:
             seen_repeats += 1
@@ -15,11 +15,11 @@ def run(actions: list[dict], max_steps: int = 5) -> dict:
             seen_repeats = 1
 
         if seen_repeats >= 3:
-            return {"type": "stop", "content": {"reason": "repeated action"}}
+            return {"status": "stop", "content": {"reason": "repeated action"}}
 
         previous = action
 
-    return {"type": "final", "content": {"reason": "finished"}}
+    return {"status": "final", "content": {"reason": "finished"}}
 
 
 same_action = {"tool": "search", "arguments": {"query": "返金"}}
