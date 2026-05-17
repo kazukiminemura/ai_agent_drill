@@ -26,13 +26,16 @@ class Runner:
     def run(self, user_input: str) -> dict:
         messages = [{"role": "user", "content": user_input}]
 
-        response = self.llm.chat(messages)
-        if response["type"] == "final":
-            return {"type": "final", "content": {"answer": response["content"], "messages": messages}}
-        if response["type"] != "tool_call":
-            raise ValueError(f"unsupported response: {response}")
+        llm_response = self.llm.chat(messages)
+        if llm_response["type"] == "final":
+            return {
+                "type": "final",
+                "content": {"answer": llm_response["content"], "messages": messages},
+            }
+        if llm_response["type"] != "tool_call":
+            raise ValueError(f"unsupported response: {llm_response}")
 
-        call = response["content"]
+        call = llm_response["content"]
         if call["tool_name"] not in self.tools:
             raise ValueError(f"unknown tool: {call['tool_name']}")
 
@@ -46,12 +49,15 @@ class Runner:
             },
         })
 
-        response = self.llm.chat(messages)
-        return {"type": "final", "content": {"answer": response["content"], "messages": messages}}
+        llm_response = self.llm.chat(messages)
+        return {
+            "type": "final",
+            "content": {"answer": llm_response["content"], "messages": messages},
+        }
 
 
 tools = {"calculator": calculator}
-result = Runner(FakeLLM(), tools).run("3 + 5 * 2 は？")
+run_result = Runner(FakeLLM(), tools).run("3 + 5 * 2 は？")
 
-print(result["content"]["answer"])
-print(result["content"]["messages"])
+print(run_result["content"]["answer"])
+print(run_result["content"]["messages"])

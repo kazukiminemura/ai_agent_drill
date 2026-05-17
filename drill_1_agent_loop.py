@@ -30,20 +30,20 @@ class Runner:
         messages = [{"role": "user", "content": user_input}]
 
         while True:
-            response = self.llm.chat(messages)
+            llm_response = self.llm.chat(messages)
 
-            if response["type"] == "final":
-                messages.append({"role": "assistant", "content": response["content"]})
+            if llm_response["type"] == "final":
+                messages.append({"role": "assistant", "content": llm_response["content"]})
                 return {
                     "type": "final",
                     "content": {
-                        "answer": response["content"],
+                        "answer": llm_response["content"],
                         "messages": messages,
                     },
                 }
 
-            if response["type"] == "tool_call":
-                call = response["content"]
+            if llm_response["type"] == "tool_call":
+                call = llm_response["content"]
                 messages.append({"role": "assistant", "content": call})
                 try:
                     tool = self.tools[call["tool_name"]]
@@ -59,12 +59,12 @@ class Runner:
                 messages.append({"role": "tool", "content": content})
                 continue
 
-            raise ValueError(f"unsupported response: {response}")
+            raise ValueError(f"unsupported response: {llm_response}")
 
 
 tools = {"calculator": calculator}
-result = Runner(FakeLLM(), tools).run("3 + 5 * 2 は？")
+run_result = Runner(FakeLLM(), tools).run("3 + 5 * 2 は？")
 
-print(result["content"]["answer"])
-for message in result["content"]["messages"]:
+print(run_result["content"]["answer"])
+for message in run_result["content"]["messages"]:
     print(message)

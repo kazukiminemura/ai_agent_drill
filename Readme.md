@@ -554,16 +554,16 @@ result = tool(**call["arguments"])
 
 作るもの: `calculator(expression: str) -> int`, `FakeLLM.chat(messages: list[dict]) -> dict`, `Runner.run(user_input: str) -> dict`
 
-出力で確認すること: `Runner.run()` の返り値から、最終回答と処理中に積まれた `messages` の両方を確認できるかを見ます。
+出力で確認すること: `Runner.run()` の返り値から、Agent の最終回答と処理中に積まれた `messages` の両方を確認できるかを見ます。
 
 回答の形:
 
 ```python
 runner = Runner(FakeLLM(), {"calculator": calculator})
-response = runner.run("3 + 5 * 2 は？")
-assert response["type"] == "final"
-assert response["content"]["answer"] == "答えは13です。"
-assert response["content"]["messages"]
+run_result = runner.run("3 + 5 * 2 は？")
+assert run_result["type"] == "final"
+assert run_result["content"]["answer"] == "答えは13です。"
+assert run_result["content"]["messages"]
 ```
 
 Drill 0.6 の `run` 関数を `Runner` クラスに移してください。まだ while ループは使わず、FakeLLM を2回呼ぶだけで大丈夫です。
@@ -577,20 +577,39 @@ class Runner:
         self.tools = tools
 ```
 
+この Drill では、dict の役割を次の3つに分けて考えます。
+
+1. `llm_response`: `FakeLLM.chat()` が返す制御用 dict。`type` と `content` を持ちます。
+2. `message`: `messages` に保存する履歴 dict。`role` と `content` を持ちます。
+3. `run_result`: `Runner.run()` が最後に返す Agent 実行結果。最終回答と `messages` をまとめます。
+
+`Runner.run()` の返り値は message ではありません。Agent の外側から結果を確認しやすくするための実行結果です。
+
+```python
+{
+    "type": "final",
+    "content": {
+        "answer": "答えは13です。",
+        "messages": messages,
+    },
+}
+```
+
 実装の流れ:
 
 1. Drill 0.6 の `run()` の中身を `Runner.run()` に移します。
 2. `__init__` で受け取った `llm` と `tools` を `self.llm`, `self.tools` に保存します。
 3. `run()` では user message を `messages` に入れます。
-4. `self.llm.chat(messages)` を呼び、tool_call なら `self.tools` から tool を実行します。
+4. `llm_response = self.llm.chat(messages)` を呼び、tool_call なら `self.tools` から tool を実行します。
 5. tool result を `messages` に追加して、もう一度 LLM を呼びます。
-6. 最後は answer と messages を `content` に入れた `final` dict を返します。
+6. 最後は answer と messages を `content` に入れた `run_result` を返します。
 
 合格条件:
 
 - `Runner(FakeLLM(), tools).run(user_input)` で動く
 - `Runner` が `llm` と `tools` を持つ
-- 返り値は `{"type": "final", "content": {"answer": ..., "messages": ...}}`
+- `Runner.run()` の返り値は `{"type": "final", "content": {"answer": ..., "messages": ...}}`
+- `messages` の中の各要素は `role` と `content` を持つ message
 
 条件を満たさない場合:
 
@@ -613,21 +632,27 @@ class Runner:
 
 作るもの: `calculator(expression: str) -> int`, `FakeLLM.chat(messages: list[dict]) -> dict`, `Runner.run(user_input: str) -> dict`
 
-出力で確認すること: `messages` に user、assistant の tool_call、tool result、assistant final が順番に残り、`content` から最終回答を取り出せるかを見ます。
+出力で確認すること: Agent loop が、LLM response を見て次の行動を決め、message を履歴に残し、最後に run result として最終回答と `messages` を返せるかを見ます。
 
 回答の形:
 
 ```python
 runner = Runner(FakeLLM(), {"calculator": calculator})
-response = runner.run("3 + 5 * 2 は？")
-assert response["type"] == "final"
-assert response["content"]["answer"] == "答えは13です。"
-assert [m["role"] for m in response["content"]["messages"]] == ["user", "assistant", "tool", "assistant"]
+run_result = runner.run("3 + 5 * 2 は？")
+assert run_result["type"] == "final"
+assert run_result["content"]["answer"] == "答えは13です。"
+assert [m["role"] for m in run_result["content"]["messages"]] == ["user", "assistant", "tool", "assistant"]
 ```
 
 Drill 0.8 の Runner に while ループを入れて、`final` が返るまで tool_call を処理してください。message や tool はまだクラスにせず、dict のまま扱います。
 
-assistant の tool_call も履歴に残す場合は、`response` 全体ではなく `response["content"]` だけを message の `content` に入れます。`type` は LLM response のキーなので、`role` を持つ message には入れません。
+この Drill の主役は、Agent の構成要素の役割分担です。
+
+- `FakeLLM.chat()` は `llm_response` を返します。これは Runner が次に何をするか決めるための dict です。
+- `Runner.run()` は `run_result` を返します。これは Agent 実行後に外側へ返す dict です。
+- `messages` は Agent の作業ログです。中に入る各 dict は message なので、`type` ではなく `role` を持ちます。
+
+assistant の tool_call も履歴に残す場合は、`llm_response` 全体ではなく `llm_response["content"]` だけを message の `content` に入れます。`type` は LLM response のキーなので、`role` を持つ message には入れません。
 
 ```python
 {"role": "assistant", "content": {"tool_name": "calculator", "arguments": {"expression": "3 + 5 * 2"}}}
@@ -636,17 +661,18 @@ assistant の tool_call も履歴に残す場合は、`response` 全体ではな
 実装の流れ:
 
 1. `messages` に user message を入れます。
-2. `while True` で `self.llm.chat(messages)` を呼びます。
-3. `tool_call` が返ったら、assistant message として `messages` に追加します。
-4. `content["tool_name"]` で tool を探し、`arguments` を渡して実行します。
+2. `while True` で `llm_response = self.llm.chat(messages)` を呼びます。
+3. `llm_response["type"] == "tool_call"` なら、`llm_response["content"]` を `call` として取り出し、assistant message として `messages` に追加します。
+4. `call["tool_name"]` で tool を探し、`call["arguments"]` を渡して実行します。
 5. tool result を `role="tool"` の message として追加します。
-6. `final` が返ったら assistant message を追加し、answer と messages を返して loop を終えます。
+6. `llm_response["type"] == "final"` なら assistant message を追加し、answer と messages を入れた `run_result` を返して loop を終えます。
 
 合格条件:
 
 - `Runner(FakeLLM(), tools).run(user_input)` で動く
 - ログが user、assistant tool_call、tool、assistant final の順に残る
 - 最終回答が `答えは13です。`
+- `Runner.run()` の返り値は message ではなく、answer と messages を持つ run result
 
 条件を満たさない場合:
 
